@@ -1,0 +1,28 @@
+{
+  "phase": "0-feasibility-incomplete",
+  "repo": "https://github.com/sheltonsilas/bluej-ipad-sideload",
+  "last_green_commit": null,
+  "open_tasks": [
+    "Run and diagnose GluonFX Maven iOS build on macOS",
+    "Try GluonFX Gradle or alternate Maven/native iOS shell if the first attempt fails",
+    "Replace EPL-2.0 ECJ test dependency with a GPL-compatible compiler before product use",
+    "Expand interpreter semantics and tests",
+    "Implement BlueJ UI integration only after native UI feasibility is demonstrated"
+  ],
+  "running_jobs": [],
+  "last_heartbeat_utc": "2026-10-17T18:25:00Z",
+  "battery_percent": 100,
+  "retry_counts": {},
+  "notes": "A/B/C limited prototype proofs pass locally (5 tests). CI proof D is pending; Phase 0 incomplete; no IPA or Release.",
+  "keep_awake": {
+    "backup": "C:\\Users\\Ramya\\power_settings_backup.txt",
+    "persistent_keep_awake_enabled": true,
+    "watchdog_script": "%TEMP%\\bluej-ipad-keep-awake-watchdog.ps1",
+    "worker_script": "%TEMP%\\bluej-ipad-keep-awake.ps1",
+    "watchdog_pid_file": "%TEMP%\\bluej-ipad-watchdog.pid",
+    "worker_pid_file": "%TEMP%\\bluej-ipad-ipad-worker.pid",
+    "display_timeout_minutes": 1,
+    "worker_pid": 8096,
+    "watchdog_pid": 4572
+  }
+}

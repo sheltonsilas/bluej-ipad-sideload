@@ -1,0 +1,18 @@
+BlueJ for iPad (unofficial port) — provenance notice
+
+This repository is derived from the BlueJ and Greenfoot source repository:
+https://github.com/k-pet-group/BlueJ-Greenfoot
+
+Upstream commit at the start of this port: bf11ce44a6dcb866921485dd43fb31411dc32937
+
+BlueJ is maintained by the BlueJ team at King's College London. This community port is
+unofficial and is not endorsed by the BlueJ team. BlueJ names, marks, and artwork remain
+subject to their owners' terms; use only as permitted and replace on request.
+
+Modifications planned for this project: experimental iPad/iOS feasibility work, an in-process
+compiler/interpreter spike, and an iOS user interface. No claim of feature parity or a working
+iOS build is made until the corresponding tests and CI evidence are recorded.
+
+The upstream LICENSE.txt and all original source copyright notices are preserved. The upstream
+project states GPL version 2 with the Classpath Exception; see LICENSE.txt and upstream third-party
+license inventories for applicable component-specific terms.
