@@ -16,12 +16,12 @@ jobs:
   gluonfx-maven-ios:
     name: GluonFX Maven / JavaFX iOS simulator
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: graalvm-community
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
       - name: Select newest Xcode
@@ -29,11 +29,12 @@ jobs:
       - name: Toolchain versions
         run: |
           java -version
+          echo "GRAALVM_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
           xcodebuild -version
           xcrun --sdk iphonesimulator --show-sdk-version
       - name: Build JavaFX iOS application with GluonFX Maven
         working-directory: ci/ios-hello
-        run: mvn -B -e -Dgluonfx.target=ios gluonfx:build gluonfx:link
+        run: mvn -B -e -Pios gluonfx:build
       - name: Package unsigned app as IPA
         working-directory: ci/ios-hello
         run: |
@@ -50,6 +51,5 @@ jobs:
         with:
           name: ios-feasibility-spike
           path: |
-            ci/ios-hello/target/**/*.log
-            ci/ios-hello/target/**/*.txt
+            ci/ios-hello/target
             ${{ runner.temp }}/HelloApp-unsigned.ipa

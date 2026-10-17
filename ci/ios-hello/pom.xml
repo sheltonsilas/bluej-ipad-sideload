@@ -30,9 +30,7 @@
         <artifactId>gluonfx-maven-plugin</artifactId>
         <version>${gluonfx.version}</version>
         <configuration>
-          <target>ios</target>
           <mainClass>org.bluej.ipad.hello.HelloApp</mainClass>
-          <attach>false</attach>
           <nativeImageArgs>
             <nativeImageArg>--no-fallback</nativeImageArg>
           </nativeImageArgs>
@@ -40,4 +38,12 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>ios</id>
+      <properties>
+        <gluonfx.target>ios</gluonfx.target>
+      </properties>
+    </profile>
+  </profiles>
 </project>
