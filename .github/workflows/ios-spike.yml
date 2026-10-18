@@ -9,16 +9,56 @@ on:
 permissions:
   contents: read
 
+env:
+  MARKETING_NAME: BlueJ for iPad (unofficial port)
+
 jobs:
-  javafx-ios-intel:
-    name: JavaFX iOS (macos-15-intel)
-    runs-on: macos-15-intel
-    timeout-minutes: 70
+  ios-build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: plain-java 1.0.28
+            module: ci/ios-shell
+            plugin: '1.0.28'
+            app: BlueJShell
+            selftest: true
+            runner: macos-15-intel
+          - name: plain-java 1.0.29
+            module: ci/ios-shell
+            plugin: '1.0.29'
+            app: BlueJShell
+            selftest: true
+            runner: macos-15-intel
+          - name: javafx 1.0.28
+            module: ci/ios-hello
+            plugin: '1.0.28'
+            app: HelloApp
+            selftest: false
+            runner: macos-15-intel
+          - name: javafx 1.0.29
+            module: ci/ios-hello
+            plugin: '1.0.29'
+            app: HelloApp
+            selftest: false
+            runner: macos-15-intel
+          - name: javafx 1.0.28 (arm64 host)
+            module: ci/ios-hello
+            plugin: '1.0.28'
+            app: HelloApp
+            selftest: false
+            arch: aarch64
+            runner: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Gluon GraalVM
         uses: gluonhq/setup-graalvm@master
+        with:
+          arch: ${{ matrix.arch || 'x86_64' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -30,129 +70,39 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
           uname -m
 
-      - name: GluonFX native build (JavaFX hello app, iOS device target)
-        working-directory: ci/ios-hello
-        run: mvn -B -e -Pios gluonfx:build
-
-      - name: Package unsigned IPA
-        working-directory: ci/ios-hello
-        run: |
-          set -euo pipefail
-          APP=$(find target/gluonfx -name '*.app' -type d -print -quit)
-          echo "APP=$APP"
-          test -n "$APP"
-          mkdir -p "$RUNNER_TEMP/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/Payload/HelloApp.app"
-          cd "$RUNNER_TEMP"
-          zip -qry HelloApp-unsigned.ipa Payload
-          unzip -t HelloApp-unsigned.ipa
-
-      - name: Upload app, IPA and diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: javafx-ios-intel
-          if-no-files-found: warn
-          path: |
-            ci/ios-hello/target/gluonfx
-            ${{ runner.temp }}/HelloApp-unsigned.ipa
-
-  plain-java-ios-intel:
-    name: Plain Java (no JavaFX) iOS (macos-15-intel)
-    runs-on: macos-15-intel
-    timeout-minutes: 70
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Gluon GraalVM
-        uses: gluonhq/setup-graalvm@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Toolchain versions
-        run: |
-          java -version
-          echo "GRAALVM_HOME=${GRAALVM_HOME:-$JAVA_HOME}" >> "$GITHUB_ENV"
-          xcodebuild -version
-          uname -m
-
       - name: Install interpreted runtime module
         run: mvn -B -e -f spike-java/pom.xml install -Dmaven.test.skip=true
 
       - name: Host self-test of the iOS shell entry point
+        if: matrix.selftest
         run: bash ci/ios-shell/tools/selftest-host.sh
 
-      - name: GluonFX native build (console shell hosting the interpreter)
-        working-directory: ci/ios-shell
-        run: mvn -B -e -Pios gluonfx:build
+      - name: GluonFX native build for iOS
+        working-directory: ${{ matrix.module }}
+        run: |
+          set -o pipefail
+          mvn -B -e -Pios -Dgluonfx.version=${{ matrix.plugin }} gluonfx:build 2>&1 | tee /tmp/gluonfx-build.log
 
       - name: Package unsigned IPA
-        working-directory: ci/ios-shell
+        working-directory: ${{ matrix.module }}
         run: |
           set -euo pipefail
           APP=$(find target/gluonfx -name '*.app' -type d -print -quit)
           echo "APP=$APP"
           test -n "$APP"
           mkdir -p "$RUNNER_TEMP/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/Payload/BlueJShell.app"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/${{ matrix.app }}.app"
           cd "$RUNNER_TEMP"
-          zip -qry BlueJShell-unsigned.ipa Payload
-          unzip -t BlueJShell-unsigned.ipa
+          zip -qry "${{ matrix.app }}-unsigned.ipa" Payload
+          unzip -t "${{ matrix.app }}-unsigned.ipa"
 
       - name: Upload app, IPA and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: plain-java-ios-intel
+          name: ${{ matrix.module }}-${{ matrix.plugin }}-${{ matrix.runner }}
           if-no-files-found: warn
           path: |
-            ci/ios-shell/target/gluonfx
-            ${{ runner.temp }}/BlueJShell-unsigned.ipa
-
-  javafx-ios-arm64:
-    name: JavaFX iOS (macos-15 arm64)
-    runs-on: macos-15
-    timeout-minutes: 70
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Gluon GraalVM (aarch64)
-        uses: gluonhq/setup-graalvm@master
-        with:
-          arch: aarch64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Toolchain versions
-        run: |
-          java -version
-          echo "GRAALVM_HOME=${GRAALVM_HOME:-$JAVA_HOME}" >> "$GITHUB_ENV"
-          xcodebuild -version
-          uname -m
-
-      - name: GluonFX native build (JavaFX hello app, iOS device target)
-        working-directory: ci/ios-hello
-        run: mvn -B -e -Pios gluonfx:build
-
-      - name: Package unsigned IPA
-        working-directory: ci/ios-hello
-        run: |
-          set -euo pipefail
-          APP=$(find target/gluonfx -name '*.app' -type d -print -quit)
-          echo "APP=$APP"
-          test -n "$APP"
-          mkdir -p "$RUNNER_TEMP/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/Payload/HelloApp.app"
-          cd "$RUNNER_TEMP"
-          zip -qry HelloApp-unsigned.ipa Payload
-          unzip -t HelloApp-unsigned.ipa
-
-      - name: Upload app, IPA and diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: javafx-ios-arm64
-          if-no-files-found: warn
-          path: |
-            ci/ios-hello/target/gluonfx
-            ${{ runner.temp }}/HelloApp-unsigned.ipa
+            ${{ matrix.module }}/target/gluonfx
+            /tmp/gluonfx-build.log
+            ${{ runner.temp }}/*.ipa
