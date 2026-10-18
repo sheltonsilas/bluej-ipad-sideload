@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.bluej.ipad</groupId>
+  <artifactId>ios-shell</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+  <name>BlueJ iPad plain-Java iOS shell spike</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>21</maven.compiler.release>
+    <gluonfx.version>1.0.28</gluonfx.version>
+    <main.class>org.bluej.ipad.shell.BlueJShell</main.class>
+    <app.identifier>org.bluej.ipad.shell</app.identifier>
+  </properties>
+
+  <dependencies>
+    <!-- The interpreted runtime prototype, installed from ../spike-java before this module builds. -->
+    <dependency>
+      <groupId>org.bluej.ipad</groupId>
+      <artifactId>runtime-spike</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>com.gluonhq</groupId>
+        <artifactId>gluonfx-maven-plugin</artifactId>
+        <version>${gluonfx.version}</version>
+        <configuration>
+          <verbose>true</verbose>
+          <target>${gluonfx.target}</target>
+          <mainClass>${main.class}</mainClass>
+          <appIdentifier>${app.identifier}</appIdentifier>
+          <nativeImageArgs>
+            <nativeImageArg>--no-fallback</nativeImageArg>
+          </nativeImageArgs>
+          <releaseConfiguration>
+            <vendor>BlueJ iPad feasibility spike</vendor>
+            <description>Unofficial BlueJ-for-iPad runtime shell (no JavaFX)</description>
+            <bundleName>BlueJShell</bundleName>
+            <bundleShortVersion>0.1</bundleShortVersion>
+            <bundleVersion>1</bundleVersion>
+          </releaseConfiguration>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>desktop</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <properties>
+        <gluonfx.target>host</gluonfx.target>
+      </properties>
+    </profile>
+    <profile>
+      <id>ios</id>
+      <properties>
+        <gluonfx.target>ios</gluonfx.target>
+      </properties>
+    </profile>
+    <profile>
+      <id>ios-sim</id>
+      <properties>
+        <gluonfx.target>ios-sim</gluonfx.target>
+      </properties>
+    </profile>
+  </profiles>
+</project>

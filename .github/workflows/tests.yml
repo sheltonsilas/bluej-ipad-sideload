@@ -22,3 +22,6 @@ jobs:
           cache: maven
       - name: Run ECJ and interpreter proofs
         run: mvn -B -f spike-java/pom.xml test
+
+      - name: Run the iOS shell entry point on the host JVM
+        run: bash ci/ios-shell/tools/selftest-host.sh

@@ -36,3 +36,8 @@ boot/build
 lang-stride/build
 threadchecker/build
 greenfoot/build
+
+# Build outputs of the iOS/spike Java modules
+/ci/*/target/
+/ci/ios-shell/.build-counter/
+/spike-java/target/
