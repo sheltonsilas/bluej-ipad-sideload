@@ -1,28 +1,52 @@
 {
-  "phase": "0-feasibility-incomplete",
+  "phase": "0-feasibility-spike",
   "repo": "https://github.com/sheltonsilas/bluej-ipad-sideload",
-  "last_green_commit": null,
+  "last_green_commit": "9337254cd",
+  "evidence": {
+    "A_ecj_in_process_compile": "pass — 2 tests, local (Temurin 21 + Maven 3.9.16) and CI run 39092304323 (Java feasibility tests)",
+    "B_bytecode_interpreter": "pass — prototype; 3 interpreter tests covering arithmetic, string constants, field state, object construction and explicit failure on unsupported opcodes",
+    "C_interpreted_object_method_call": "pass — prototype; constructor, increment(5)=9, doubled()=18, field inspection; plus the iOS shell entry point self-test (6/6 checks) verified on Windows and on Linux CI",
+    "D_ios_native_build": "in progress — first attempts reached native-image for arm64-apple-ios and failed on an incomplete Gluon CAP cache; fix pushed, matrix run pending"
+  },
   "open_tasks": [
-    "Run and diagnose GluonFX Maven iOS build on macOS",
-    "Try GluonFX Gradle or alternate Maven/native iOS shell if the first attempt fails",
-    "Replace EPL-2.0 ECJ test dependency with a GPL-compatible compiler before product use",
-    "Expand interpreter semantics and tests",
-    "Implement BlueJ UI integration only after native UI feasibility is demonstrated"
+    "Confirm -H:-UseCAPCache lets GluonFX 1.0.28/1.0.29 produce an unsigned .ipa in CI (run 39092867370)",
+    "Publish the verified unsigned .ipa as a GitHub release asset with a SHA-256 checksum",
+    "Replace the EPL-2.0 ECJ test dependency with a GPL-compatible in-process compiler before product use",
+    "Lead the interpreter beyond the prototype subset (branches, invokes on JDK classes, exceptions, arrays, static init)",
+    "Design the iPad UI path once a native iOS build is reproducible",
+    "Request permission for the BlueJ name/logo or rename the port"
   ],
-  "running_jobs": [],
-  "last_heartbeat_utc": "2026-10-17T18:25:00Z",
-  "battery_percent": 100,
-  "retry_counts": {},
-  "notes": "A/B/C limited prototype proofs pass locally (5 tests). CI proof D is pending; Phase 0 incomplete; no IPA or Release.",
-  "keep_awake": {
-    "backup": "C:\\Users\\Ramya\\power_settings_backup.txt",
-    "persistent_keep_awake_enabled": true,
-    "watchdog_script": "%TEMP%\\bluej-ipad-keep-awake-watchdog.ps1",
-    "worker_script": "%TEMP%\\bluej-ipad-keep-awake.ps1",
-    "watchdog_pid_file": "%TEMP%\\bluej-ipad-watchdog.pid",
-    "worker_pid_file": "%TEMP%\\bluej-ipad-ipad-worker.pid",
-    "display_timeout_minutes": 1,
-    "worker_pid": 8096,
-    "watchdog_pid": 4572
-  }
+  "running_jobs": [
+    {
+      "name": "iOS feasibility spike",
+      "run_id": 39092867370,
+      "jobs": [
+        "plain-java 1.0.28",
+        "plain-java 1.0.29",
+        "javafx 1.0.28",
+        "javafx 1.0.29",
+        "javafx 1.0.28 (arm64 host)"
+      ],
+      "started_utc": "2026-10-18T03:13:38Z"
+    }
+  ],
+  "host": {
+    "os": "Windows 11",
+    "portable_toolchain": {
+      "jdk": "ipados-ubuntu/tools/temurin21/jdk-21.0.12.1+1",
+      "maven": "ipados-ubuntu/tools/apache-maven-3.9.16",
+      "wrapper": "ipados-ubuntu/tools/mvn.sh"
+    },
+    "keep_awake": {
+      "backup": "C:/Users/Ramya/power_settings_backup.txt",
+      "sleep_and_hibernate_timeouts": "0 (AC and DC)",
+      "display_timeout_minutes": 1,
+      "lid_action": "set to 0 (do nothing) but not visible in this scheme's query output",
+      "worker_script": "%TEMP%/bluej-ipad-keep-awake.ps1",
+      "watchdog_script": "%TEMP%/bluej-ipad-keep-awake-watchdog.ps1",
+      "monitor_dir": "%TEMP%/bluej-ipad-monitor"
+    }
+  },
+  "last_heartbeat_utc": "2026-10-18T03:15:00Z",
+  "notes": "Local proofs A/B/C have reproducible evidence in docs/evidence/. Proof D is a GluonFX matrix run; no signed or installable-by-default IPA exists and no parity claim is made."
 }

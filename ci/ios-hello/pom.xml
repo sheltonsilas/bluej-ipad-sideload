@@ -15,7 +15,6 @@
     <gluonfx.version>1.0.28</gluonfx.version>
     <main.class>org.bluej.ipad.hello.HelloApp</main.class>
     <app.identifier>org.bluej.ipad.hello</app.identifier>
-    <native.image.extra.arg>-H:-UseCAPCache</native.image.extra.arg>
   </properties>
 
   <dependencies>
@@ -42,11 +41,7 @@
           <target>${gluonfx.target}</target>
           <mainClass>${main.class}</mainClass>
           <appIdentifier>${app.identifier}</appIdentifier>
-          <nativeImageArgs>
-            <!-- Gluon Substrate 0.0.68 always passes -H:+UseCAPCache; its CAP cache for this
-                 GraalVM build is incomplete, so the last flag wins and disables it. -->
-            <nativeImageArg>${native.image.extra.arg}</nativeImageArg>
-          </nativeImageArgs>
+
           <releaseConfiguration>
             <vendor>BlueJ iPad feasibility spike</vendor>
             <description>Unofficial BlueJ-for-iPad feasibility build</description>
@@ -74,6 +69,25 @@
       <properties>
         <gluonfx.target>ios</gluonfx.target>
       </properties>
+    </profile>
+    <!-- Substrate 0.0.66-0.0.69 stopped copying RISCV64LibCHelperDirectives.cap into the
+         iOS CAP cache directory, which the Gluon GraalVM build requires. Point native-image
+         at a directory extracted from the substrate jar instead (see the CI workflow). -->
+    <profile>
+      <id>capcache-override</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.gluonhq</groupId>
+            <artifactId>gluonfx-maven-plugin</artifactId>
+            <configuration>
+              <nativeImageArgs>
+                <nativeImageArg>-H:CAPCacheDir=${project.build.directory}/capcache-ios</nativeImageArg>
+              </nativeImageArgs>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <profile>
       <id>ios-sim</id>

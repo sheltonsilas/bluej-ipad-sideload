@@ -9,9 +9,6 @@ on:
 permissions:
   contents: read
 
-env:
-  MARKETING_NAME: BlueJ for iPad (unofficial port)
-
 jobs:
   ios-build:
     name: ${{ matrix.name }}
@@ -21,33 +18,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: plain-java 1.0.28
+          - name: plain-java 1.0.25
             module: ci/ios-shell
-            plugin: '1.0.28'
+            plugin: '1.0.25'
             app: BlueJShell
             selftest: true
             runner: macos-15-intel
-          - name: plain-java 1.0.29
+          - name: javafx 1.0.25
+            module: ci/ios-hello
+            plugin: '1.0.25'
+            app: HelloApp
+            selftest: false
+            runner: macos-15-intel
+          - name: plain-java 1.0.28 + cap override
             module: ci/ios-shell
-            plugin: '1.0.29'
+            plugin: '1.0.28'
+            substrate: '0.0.68'
             app: BlueJShell
             selftest: true
+            capoverride: true
             runner: macos-15-intel
-          - name: javafx 1.0.28
+          - name: javafx 1.0.25 arm64 host
             module: ci/ios-hello
-            plugin: '1.0.28'
-            app: HelloApp
-            selftest: false
-            runner: macos-15-intel
-          - name: javafx 1.0.29
-            module: ci/ios-hello
-            plugin: '1.0.29'
-            app: HelloApp
-            selftest: false
-            runner: macos-15-intel
-          - name: javafx 1.0.28 (arm64 host)
-            module: ci/ios-hello
-            plugin: '1.0.28'
+            plugin: '1.0.25'
             app: HelloApp
             selftest: false
             arch: aarch64
@@ -77,11 +70,24 @@ jobs:
         if: matrix.selftest
         run: bash ci/ios-shell/tools/selftest-host.sh
 
+      - name: Extract a complete iOS CAP cache from the substrate jar
+        if: matrix.capoverride
+        run: |
+          set -euo pipefail
+          SUB=${{ matrix.substrate }}
+          curl -sSL --fail -o /tmp/substrate.jar \
+            "https://repo1.maven.org/maven2/com/gluonhq/substrate/$SUB/substrate-$SUB.jar"
+          mkdir -p "${{ matrix.module }}/target/capcache-ios"
+          (cd /tmp && unzip -o -j substrate.jar 'native/ios/cap/*.cap' \
+            -d "$GITHUB_WORKSPACE/${{ matrix.module }}/target/capcache-ios")
+          ls -l "${{ matrix.module }}/target/capcache-ios"
+
       - name: GluonFX native build for iOS
         working-directory: ${{ matrix.module }}
         run: |
           set -o pipefail
-          mvn -B -e -Pios -Dgluonfx.version=${{ matrix.plugin }} gluonfx:build 2>&1 | tee /tmp/gluonfx-build.log
+          mvn -B -e -Pios ${{ matrix.capoverride && '-Pcapcache-override' || '' }} \
+            -Dgluonfx.version=${{ matrix.plugin }} gluonfx:build 2>&1 | tee /tmp/gluonfx-build.log
 
       - name: Package unsigned IPA
         working-directory: ${{ matrix.module }}
