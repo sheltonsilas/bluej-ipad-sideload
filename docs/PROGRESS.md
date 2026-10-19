@@ -49,11 +49,24 @@ usable IDE.
   bundle plus `.ipa`; CI then asserts the archive is intact, has an `Info.plist` for
   `iPhoneOS`, and contains an arm64 Mach-O executable with `LC_BUILD_VERSION platform=2`.
 
-## Next: Phase 1
+## Phase 1: interpreter subset (first slice complete)
 
-Architecture and the ordered task list are in [SPIKE_REPORT.md](SPIKE_REPORT.md#chosen-architecture-phase-1-input):
-native SwiftUI/UIKit shell, GraalVM-native Java core, extended interpreter, interpreter-native
-debugger, and replacement of the EPL-2.0 ECJ dependency before any product use.
+The architecture and ordered task list are in
+[SPIKE_REPORT.md](SPIKE_REPORT.md#chosen-architecture-phase-1-input): native SwiftUI/UIKit shell,
+GraalVM-native Java core, extended interpreter, interpreter-native debugger, and replacement of
+the EPL-2.0 ECJ dependency before any product use.
+
+The interpreter now runs the BlueJ-intro subset: branches, loops, `switch`, recursion, instance
+and static fields, static initialisers, int/object arrays, string concatenation,
+`String`/`Character`/`Math`/`Integer`/`Double` intrinsics, `System.out` capture, doubles, and
+`try`/`catch` over user and runtime exceptions, with an instruction budget that stops runaway
+loops. Evidence: 13 local tests ([docs/evidence/interpreter-conformance.md](evidence/interpreter-conformance.md))
+and a 15-check self-test of the iOS entry point ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)).
+`long`, `float`, threads, synchronization and most of the JDK are still unsupported and fail
+explicitly.
+
+Next: the Java-core ↔ Swift-UI contract with a headless harness, then the interpreter debug
+hook, then replacing ECJ for product compilation.
 
 ## What is deliberately not claimed
 

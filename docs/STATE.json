@@ -25,8 +25,12 @@
     "compiler": "open — ECJ 3.40.0 is EPL-2.0 and cannot ship in the GPLv2+CE app; evaluate the bundled OpenJDK javac",
     "debugger": "interpreter-native breakpoints/step/variables; JDI is impossible for interpreted frames on iOS"
   },
+  "phase1_progress": {
+    "interpreter_subset": "done (first slice) — branches, loops, switch, recursion, static/instance fields, static init, int/object arrays, string concat, String/Character/Math/Integer/Double intrinsics, System.out capture, doubles, try/catch for user and runtime exceptions, instruction budget; 13 local tests plus a 15-check iOS-shell self-test",
+    "still_missing": ["long", "float", "threads", "synchronization", "interfaces/default methods", "most of the JDK library", "debug hook", "Swift-UI contract"]
+  },
   "open_tasks": [
-    "Grow the interpreter to the BlueJ-intro subset (branches, arrays, exceptions, strings, statics, recursion) with a conformance suite",
+    "Define the Java-core <-> Swift-UI contract (compile, class list, bench, inspector, console) with a headless harness",
     "Define the Java-core <-> Swift-UI interface and a headless harness for it",
     "Replace the EPL-2.0 ECJ test dependency with a GPL-compatible in-process compiler before product use",
     "Implement the interpreter debug hook (breakpoints/step/variables) with tests",

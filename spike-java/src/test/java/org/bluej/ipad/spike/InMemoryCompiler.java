@@ -11,13 +11,15 @@ import org.eclipse.jdt.core.compiler.batch.BatchCompiler;
 
 /** Test-only compiler wrapper for ECJ's isolated technical feasibility proof. */
 final class InMemoryCompiler {
-    record Compilation(Map<String, byte[]> classes, String diagnostics) {
-        boolean succeeded() { return !classes.isEmpty() && diagnostics.isEmpty(); }
+    /** {@code diagnostics} may contain warnings even when compilation succeeded. */
+    record Compilation(Map<String, byte[]> classes, String diagnostics, boolean success) {
+        boolean succeeded() { return success && !classes.isEmpty(); }
     }
 
     Compilation compile(String className, String source) {
         var classes = new LinkedHashMap<String, byte[]>();
         var diagnostics = new StringWriter();
+        var compiled = new boolean[1];
         Path work = null;
         try {
             work = Files.createTempDirectory("bluej-ecj-");
@@ -28,6 +30,7 @@ final class InMemoryCompiler {
             Files.writeString(sourceFile, source, StandardCharsets.UTF_8);
             boolean ok = BatchCompiler.compile(new String[]{"-21", "-proc:none", "-encoding", "UTF-8", "-d", output.toString(), sourceFile.toString()},
                     new PrintWriter(diagnostics), new PrintWriter(diagnostics), null);
+            compiled[0] = ok;
             if (ok) try (var paths = Files.walk(output)) {
                 for (Path file : paths.filter(p -> p.toString().endsWith(".class")).toList()) {
                     String name = output.relativize(file).toString().replace(java.io.File.separatorChar, '.');
@@ -43,6 +46,6 @@ final class InMemoryCompiler {
                 });
             } catch (Exception ex) { diagnostics.append("\ncleanup failed: ").append(ex.getMessage()); }
         }
-        return new Compilation(Map.copyOf(classes), diagnostics.toString());
+        return new Compilation(Map.copyOf(classes), diagnostics.toString(), compiled[0]);
     }
 }

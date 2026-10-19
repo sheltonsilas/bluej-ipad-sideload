@@ -66,10 +66,24 @@ Decision: **a GraalVM-native iPad app that hosts an in-process bytecode runtime,
 
 **Phase 0 is COMPLETE.** A, B and C have local and CI evidence; D has three green macOS jobs producing verified unsigned arm64 iOS IPAs, released as `v0.1.0-phase0`. No BlueJ product parity is claimed; see [PARITY.md](../PARITY.md).
 
-## Next (Phase 1)
+## Phase 1 progress
 
-1. Grow the interpreter to the BlueJ-intro subset with a conformance suite (branches, arrays, exceptions, strings, statics, recursion), keeping instruction budgets for cancellation.
-2. Define the Java-core ↔ Swift-UI interface (project compile, class list, bench objects, inspector tree, console) and a headless test harness for it.
-3. Replace the EPL-2.0 ECJ test dependency: evaluate the bundled OpenJDK javac for in-process compilation under GPLv2+CE.
-4. Wire the interpreter debug hook (breakpoints/step/variables) with tests.
-5. Keep the iOS CI green on every push and attach each build's IPA to a release.
+1. **Interpreter subset (done, first slice).** The interpreter now executes branches, loops,
+   `switch`, recursion, instance and static fields, static initialisers, int/object arrays,
+   string literals and concatenation, `String`/`Character`/`Math`/`Integer`/`Double`
+   intrinsics, `System.out` capture, double arithmetic, and `try`/`catch` over user and runtime
+   exceptions (including `/ by zero` and array bounds), with an instruction budget that stops
+   runaway loops. Evidence: 13 local tests in `spike-java`
+   ([docs/evidence/interpreter-conformance.md](evidence/interpreter-conformance.md)) and a
+   15-check host/CI self-test of the iOS entry point
+   ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)). `long`,
+   `float`, threads, synchronization and most of the JDK remain explicitly unsupported.
+2. **Next: the Java-core ↔ Swift-UI contract.** Define compile/class-list/bench/inspector/
+   console operations and a headless harness that exercises them without a UI, so the iOS
+   shell can be built against a stable boundary.
+3. **Then: replace ECJ for product use.** Evaluate the bundled OpenJDK javac for in-process
+   compilation under GPLv2+CE; ECJ stays test-scope until then.
+4. **Then: interpreter debug hook.** Breakpoints, stepping and variable views on interpreted
+   frames, with tests that do not depend on JDI.
+5. **Always: keep the iOS CI green.** Every push must keep the macOS matrix producing a
+   verified arm64 IPA; attach each milestone build to a release.

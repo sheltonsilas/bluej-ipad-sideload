@@ -9,11 +9,12 @@ Status tracks the iPad application, not the isolated Java spike. **No applicatio
 | Compile button and javac-style diagnostics | PARTIAL | Test-only ECJ compiles a source string and reports diagnostics; ECJ license is EPL-2.0, excluded from the distributable application. No BlueJ editor/UI integration. |
 | Uncompiled-class striping | UNSUPPORTED | No class diagram UI. |
 | Code editor, syntax highlighting and editing actions | UNSUPPORTED | No application UI. |
-| Constructor dialog and object bench | PARTIAL | Interpreter constructs objects and retains interpreted instances; not integrated with a UI or with project classes. |
-| Method calls, parameters and return values | PARTIAL | Interpreter tests cover integer arguments/returns and object method calls. Limited bytecode only. |
-| Inspector and object reference navigation | PARTIAL | Interpreter API exposes stored fields; no UI or arbitrary graph inspection. |
-| Terminal and Scanner input | UNSUPPORTED | Not implemented. |
-| Static method calls | PARTIAL | Test API covers small arithmetic and string-returning static methods. |
+| Constructor dialog and object bench | PARTIAL | The interpreter constructs objects, runs their constructors and retains interpreted instances for later calls; there is no UI or project-class integration. |
+| Method calls, parameters and return values | PARTIAL | Interpreted calls cover parameters/returns, recursion, loops, branches, switch, int/object arrays, doubles, strings and `try`/`catch`; 11 interpreter tests and a 15-check device entry point. Unsupported bytecode (e.g. `long`) fails explicitly. |
+| Inspector and object reference navigation | PARTIAL | The runtime exposes instance fields (including array contents via `InterpretedArray.snapshot()`); no UI, no reference graph, no computed properties. |
+| Terminal and Scanner input | PARTIAL | `System.out.print`/`println` are captured into the runtime's output buffer; there is no console UI and no `Scanner`/stdin support. |
+| Static method calls | PARTIAL | Static fields, static initialisers and static methods work, including static state shared across instances; no UI integration. |
+| Introductory language subset (loops, arrays, strings, exceptions, doubles) | PARTIAL | Interpreter coverage is listed in [docs/evidence/interpreter-conformance.md](docs/evidence/interpreter-conformance.md): arithmetic, comparisons, branches, switch, loops, recursion, fields, static init, int/object arrays, string concatenation and intrinsics, doubles, and user/runtime exceptions. Missing: `long`, `float`, threads, synchronization, interfaces/default methods, generics beyond erasure, and most of the JDK library. |
 | Breakpoints, stepping and variable view | UNSUPPORTED | No debug interface yet; planned as an interpreter-native hook because JDI cannot attach to interpreted frames on iOS. |
 | JUnit support | UNSUPPORTED | Not implemented; any future UI must clearly explain lack of support. |
 | Native iOS build of a Java application | PARTIAL | Verified: `v0.1.0-phase0` ships unsigned arm64 iOS IPAs for a JavaFX hello app and for a non-JavaFX GraalVM shell hosting the interpreter (CI run 39205053650). Interactive JavaFX UI on device is not proven and is not the chosen path. |
