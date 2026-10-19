@@ -1,7 +1,8 @@
 # Progress — BlueJ for iPad feasibility work
 
 Updated 2026-10-19. Repo: <https://github.com/sheltonsilas/bluej-ipad-sideload> (public, unofficial).
-Release: [`v0.1.0-phase0`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.1.0-phase0).
+Latest release: [`v0.2.0-phase1`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.2.0-phase1);
+first proof: [`v0.1.0-phase0`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.1.0-phase0).
 
 ## Where this stands
 
@@ -11,8 +12,8 @@ the last two of them in CI, and the resulting unsigned iOS builds are released w
 | # | Proof | Evidence | Status |
 | --- | --- | --- | --- |
 | A | ECJ compiles a Java source string to bytecode in process | `spike-java` `InMemoryCompilerTest` (2 tests) on Windows and in [run 39205053696](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39205053696) | Proven, test scope only |
-| B | An interpreter executes compiled bytecode | `InterpreterTest` (3 tests): arithmetic, string constants, field state, explicit failure on an unsupported opcode | Proven, narrow prototype |
-| C | Method invocation on an interpreted object | Constructor plus `increment(5) == 9`, `doubled() == 18`, field inspection; `BlueJShell` host self-test 6/6 | Proven, narrow prototype |
+| B | An interpreter executes compiled bytecode | 11 `InterpreterTest` cases: arithmetic, strings, branches/loops/switch, recursion, fields, arrays, statics, doubles, exceptions, output, budget, explicit failure on unsupported bytecode | Proven, now the BlueJ-intro subset |
+| C | Method invocation on an interpreted object | Constructor plus `increment(5) == 9`, `doubled() == 18`, field inspection; `BlueJShell` host self-test 18/18 including three protocol calls | Proven |
 | D | Java app built for iOS that yields an unsigned `.ipa` | [run 39205053650](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39205053650): three green macOS jobs, arm64 iOS IPAs verified in CI by `ci/tools/verify-ipa.py` | Proven |
 
 ## Released artifacts
@@ -23,8 +24,8 @@ usable IDE.
 
 | File | SHA-256 | Size |
 | --- | --- | --- |
-| `HelloApp-unsigned.ipa` | `57e24a0b5d5279c9550b9632cab27892616b1bf3e24909a2140ab35fb42091a0` | 23,980,645 B |
-| `BlueJShell-unsigned.ipa` | `683c7b097cc4fa8a9dece1990a5f4c22dc7b0743ce63190dc5d925cb886541a5` | 15,193,593 B |
+| `HelloApp-unsigned.ipa` | `4a74c93f1e26597266c1fdf3cdd2652f7e9952d43ebc931ca1c41086e31984c6` | 23,986,658 B |
+| `BlueJShell-unsigned.ipa` | `078af92ae1df4cda8b12b9bb70c34a8f00f9af6b3497de71967ad057a85bdd21` | 15,208,010 B |
 
 ## Local host work (Windows, no admin)
 
