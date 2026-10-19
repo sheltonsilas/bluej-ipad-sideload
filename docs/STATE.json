@@ -27,10 +27,11 @@
   },
   "phase1_progress": {
     "interpreter_subset": "done (first slice) — branches, loops, switch, recursion, static/instance fields, static init, int/object arrays, string concat, String/Character/Math/Integer/Double intrinsics, System.out capture, doubles, try/catch for user and runtime exceptions, instruction budget; 13 local tests plus a 15-check iOS-shell self-test",
-    "still_missing": ["long", "float", "threads", "synchronization", "interfaces/default methods", "most of the JDK library", "debug hook", "Swift-UI contract"]
+    "core_protocol": "done — org.bluej.ipad.core CoreSession + CoreProtocol (JSON) with 10 headless tests and 3 protocol calls in the iOS-shell self-test; documented in docs/CORE_PROTOCOL.md",
+    "still_missing": ["long", "float", "threads", "synchronization", "interfaces/default methods", "most of the JDK library", "debug hook", "SwiftUI shell", "C entry point for the bridge"]
   },
   "open_tasks": [
-    "Define the Java-core <-> Swift-UI contract (compile, class list, bench, inspector, console) with a headless harness",
+    "Build the SwiftUI shell skeleton in CI against the tested core protocol (stub bridge first)",
     "Define the Java-core <-> Swift-UI interface and a headless harness for it",
     "Replace the EPL-2.0 ECJ test dependency with a GPL-compatible in-process compiler before product use",
     "Implement the interpreter debug hook (breakpoints/step/variables) with tests",

@@ -1,7 +1,9 @@
-# iOS shell host self-test — 2026-10-19T05:52:08Z
+# iOS shell host self-test — 2026-10-19T06:05:12Z
 
 Host: Windows (Git Bash), portable Temurin 21.0.12.1+1, portable Maven 3.9.16
 Command: `bash ci/ios-shell/tools/selftest-host.sh`
+
+The same entry point is compiled by the macOS CI matrix for arm64-apple-ios and run there as a host self-test.
 
 ```
 BlueJ iPad runtime shell (feasibility spike)
@@ -22,5 +24,8 @@ PASS doubled() == 18 -> 18
 PASS field count == 9 after increment -> 9
 PASS static created() == 1 (static initialiser and field) -> 1
 PASS uncaught exception is reported -> "java.lang.ArrayIndexOutOfBoundsException"
-SELFTEST RESULT: PASS (15 passed, 0 failed)
+PASS protocol new assigns bench handle 1 -> 1
+PASS protocol invoke returns 9 -> 1
+PASS protocol classes lists the embedded class -> 1
+SELFTEST RESULT: PASS (18 passed, 0 failed)
 ```

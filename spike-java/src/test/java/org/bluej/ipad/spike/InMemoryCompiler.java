@@ -10,13 +10,13 @@ import java.util.Map;
 import org.eclipse.jdt.core.compiler.batch.BatchCompiler;
 
 /** Test-only compiler wrapper for ECJ's isolated technical feasibility proof. */
-final class InMemoryCompiler {
+public final class InMemoryCompiler {
     /** {@code diagnostics} may contain warnings even when compilation succeeded. */
-    record Compilation(Map<String, byte[]> classes, String diagnostics, boolean success) {
-        boolean succeeded() { return success && !classes.isEmpty(); }
+    public record Compilation(Map<String, byte[]> classes, String diagnostics, boolean success) {
+        public boolean succeeded() { return success && !classes.isEmpty(); }
     }
 
-    Compilation compile(String className, String source) {
+    public Compilation compile(String className, String source) {
         var classes = new LinkedHashMap<String, byte[]>();
         var diagnostics = new StringWriter();
         var compiled = new boolean[1];

@@ -65,7 +65,14 @@ and a 15-check self-test of the iOS entry point ([docs/evidence/ios-shell-host-s
 `long`, `float`, threads, synchronization and most of the JDK are still unsupported and fail
 explicitly.
 
-Next: the Java-core ↔ Swift-UI contract with a headless harness, then the interpreter debug
+The Java-core ↔ Swift-UI contract is now defined and tested: `org.bluej.ipad.core` exposes a
+synchronous, UI-free session (class metadata, bench handles, construction, calls, field
+snapshots, console capture) and a JSON protocol for the native bridge, documented in
+[CORE_PROTOCOL.md](CORE_PROTOCOL.md) with 10 headless tests
+([docs/evidence/core-session-protocol.md](evidence/core-session-protocol.md)). The iOS shell
+runs three protocol calls in its own self-test (18 checks total).
+
+Next: the SwiftUI shell skeleton against a recorded-protocol stub, then the interpreter debug
 hook, then replacing ECJ for product compilation.
 
 ## What is deliberately not claimed

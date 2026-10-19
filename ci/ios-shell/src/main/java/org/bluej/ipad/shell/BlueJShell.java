@@ -2,6 +2,8 @@ package org.bluej.ipad.shell;
 
 import java.util.Base64;
 import java.util.Map;
+import org.bluej.ipad.core.CoreProtocol;
+import org.bluej.ipad.core.CoreSession;
 import org.bluej.ipad.spike.InterpretedArray;
 import org.bluej.ipad.spike.InterpretedObject;
 import org.bluej.ipad.spike.InterpretedThrowable;
@@ -86,6 +88,23 @@ public final class BlueJShell {
             check("uncaught exception is reported", new Value.StringValue("java.lang.ArrayIndexOutOfBoundsException"),
                     new Value.StringValue(thrown.className()));
         }
+
+        // The Swift shell talks to the runtime only through CoreProtocol, so exercise the
+        // exact JSON requests it will send inside the same native image the device runs.
+        CoreSession core = new CoreSession();
+        core.load(Map.of(CLASS_NAME, classBytes));
+        CoreProtocol protocol = new CoreProtocol(core);
+        String created = protocol.handle(
+                "{\"op\":\"new\",\"class\":\"" + CLASS_NAME + "\",\"args\":[{\"int\":4}]}");
+        check("protocol new assigns bench handle 1", new Value.IntValue(1),
+                new Value.IntValue(created.contains("\"handle\":1") ? 1 : 0));
+        String invoked = protocol.handle(
+                "{\"op\":\"invoke\",\"handle\":1,\"method\":\"increment\",\"args\":[{\"int\":5}]}");
+        check("protocol invoke returns 9", new Value.IntValue(1),
+                new Value.IntValue(invoked.contains("\"int\":9") ? 1 : 0));
+        String classes = protocol.handle("{\"op\":\"classes\"}");
+        check("protocol classes lists the embedded class", new Value.IntValue(1),
+                new Value.IntValue(classes.contains("bluej.example.Counter") ? 1 : 0));
 
         System.out.println("SELFTEST RESULT: " + (failed == 0 ? "PASS" : "FAIL")
                 + " (" + passed + " passed, " + failed + " failed)");

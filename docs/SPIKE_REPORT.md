@@ -78,12 +78,19 @@ Decision: **a GraalVM-native iPad app that hosts an in-process bytecode runtime,
    15-check host/CI self-test of the iOS entry point
    ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)). `long`,
    `float`, threads, synchronization and most of the JDK remain explicitly unsupported.
-2. **Next: the Java-core ↔ Swift-UI contract.** Define compile/class-list/bench/inspector/
-   console operations and a headless harness that exercises them without a UI, so the iOS
-   shell can be built against a stable boundary.
-3. **Then: replace ECJ for product use.** Evaluate the bundled OpenJDK javac for in-process
+2. **Java-core ↔ Swift-UI contract (done).** `core/` now exposes a synchronous, UI-free
+   API — class metadata, bench handles, construction, instance/static calls, field snapshots
+   and console capture — plus a JSON protocol for the native bridge, documented in
+   [CORE_PROTOCOL.md](CORE_PROTOCOL.md) and covered by 10 headless tests
+   ([docs/evidence/core-session-protocol.md](evidence/core-session-protocol.md)). The iOS
+   shell runs three protocol calls inside its own self-test, so the contract is exercised by
+   the code compiled into the `.ipa`.
+3. **Next: the SwiftUI shell skeleton.** Build the class-diagram/bench/editor layout in
+   Xcode-less CI against a stubbed bridge that returns recorded protocol JSON, then replace
+   the stub with the exported C entry point once the native image exists.
+4. **Then: replace ECJ for product use.** Evaluate the bundled OpenJDK javac for in-process
    compilation under GPLv2+CE; ECJ stays test-scope until then.
-4. **Then: interpreter debug hook.** Breakpoints, stepping and variable views on interpreted
+5. **Then: interpreter debug hook.** Breakpoints, stepping and variable views on interpreted
    frames, with tests that do not depend on JDI.
-5. **Always: keep the iOS CI green.** Every push must keep the macOS matrix producing a
+6. **Always: keep the iOS CI green.** Every push must keep the macOS matrix producing a
    verified arm64 IPA; attach each milestone build to a release.
