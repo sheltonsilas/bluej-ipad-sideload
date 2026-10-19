@@ -13,11 +13,11 @@ they are **unsigned**: an iPad will only install them after re-signing with your
   fail explicitly as unsupported.
 - **A tested Java ↔ Swift contract.** `org.bluej.ipad.core` exposes class metadata, bench
   handles, construction, instance/static calls, field snapshots and console capture, plus a
-  JSON protocol documented in [CORE_PROTOCOL.md](CORE_PROTOCOL.md).
+  JSON protocol documented in [CORE_PROTOCOL.md](https://github.com/sheltonsilas/bluej-ipad-sideload/blob/main/docs/CORE_PROTOCOL.md).
 - **Evidence:** 23 JVM tests and an 18-check self-test of the iOS entry point
-  ([interpreter conformance](evidence/interpreter-conformance.md),
-  [core protocol](evidence/core-session-protocol.md),
-  [shell self-test](evidence/ios-shell-host-selftest.md)).
+  ([interpreter conformance](https://github.com/sheltonsilas/bluej-ipad-sideload/blob/main/docs/evidence/interpreter-conformance.md),
+  [core protocol](https://github.com/sheltonsilas/bluej-ipad-sideload/blob/main/docs/evidence/core-session-protocol.md),
+  [shell self-test](https://github.com/sheltonsilas/bluej-ipad-sideload/blob/main/docs/evidence/ios-shell-host-selftest.md)).
 
 ## Files
 
