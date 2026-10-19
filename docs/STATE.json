@@ -10,10 +10,11 @@
     "D_ios_native_build": "pass — CI run 39205053650, three green macOS jobs; unsigned .ipa artifacts with Info.plist (iPhoneOS, MinimumOSVersion 11.0) and arm64 Mach-O (LC_BUILD_VERSION platform=2, SDK 18.5) verified by ci/tools/verify-ipa.py"
   },
   "release": {
-    "tag": "v0.1.0-phase0",
+    "tag": "v0.2.0-phase1",
+    "previous_tag": "v0.1.0-phase0",
     "assets": [
-      {"name": "HelloApp-unsigned.ipa", "sha256": "57e24a0b5d5279c9550b9632cab27892616b1bf3e24909a2140ab35fb42091a0", "bytes": 23980645},
-      {"name": "BlueJShell-unsigned.ipa", "sha256": "683c7b097cc4fa8a9dece1990a5f4c22dc7b0743ce63190dc5d925cb886541a5", "bytes": 15193593}
+      {"name": "HelloApp-unsigned.ipa", "sha256": "4a74c93f1e26597266c1fdf3cdd2652f7e9952d43ebc931ca1c41086e31984c6", "bytes": 23986658},
+      {"name": "BlueJShell-unsigned.ipa", "sha256": "078af92ae1df4cda8b12b9bb70c34a8f00f9af6b3497de71967ad057a85bdd21", "bytes": 15208010}
     ],
     "signed": false,
     "installable_without_resigning": false
