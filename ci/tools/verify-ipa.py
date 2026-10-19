@@ -21,6 +21,13 @@ CPU_TYPE_X86_64 = 0x01000007
 FILE_TYPE_EXECUTE = 0x2
 PLATFORM_IOS = 2
 PLATFORM_IOSSIMULATOR = 7
+LC_VERSION_MIN_MACOSX = 0x24
+LC_VERSION_MIN_IPHONEOS = 0x25
+LC_BUILD_VERSION = 0x32
+VERSION_MIN_PLATFORMS = {
+    LC_VERSION_MIN_MACOSX: 1,   # PLATFORM_MACOS, i.e. not iOS
+    LC_VERSION_MIN_IPHONEOS: PLATFORM_IOS,
+}
 
 
 def sha256(path: str) -> str:
@@ -32,8 +39,9 @@ def sha256(path: str) -> str:
 
 
 def macho_summary(data: bytes) -> dict:
+    # struct mach_header_64: magic, cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags, reserved
     magic, cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags, _reserved = struct.unpack_from(
-        "<IiiIIII", data, 0
+        "<IiiIIIII", data, 0
     )
     if magic not in (0xFEEDFACF, 0xFEEDFACE):
         return {"error": f"unexpected Mach-O magic 0x{magic:08x}"}
@@ -49,17 +57,20 @@ def macho_summary(data: bytes) -> dict:
     offset = 32
     for _ in range(ncmds):
         cmd, cmdsize = struct.unpack_from("<II", data, offset)
-        if cmd in (0x32, 0x24):  # LC_BUILD_VERSION / LC_VERSION_MIN_IPHONEOS
-            if cmd == 0x32:
-                platform, minos, sdk, _ntools = struct.unpack_from("<IIII", data, offset + 8)
-                result["platform"] = platform
-                result["min_os"] = f"{minos >> 16}.{(minos >> 8) & 0xff}.{minos & 0xff}"
-                result["sdk"] = f"{sdk >> 16}.{(sdk >> 8) & 0xff}.{sdk & 0xff}"
-            else:
-                minos, sdk = struct.unpack_from("<II", data, offset + 8)
-                result["platform"] = PLATFORM_IOS
-                result["min_os"] = f"{minos >> 16}.{(minos >> 8) & 0xff}.{minos & 0xff}"
+        if cmd == LC_BUILD_VERSION:
+            platform, minos, sdk, _ntools = struct.unpack_from("<IIII", data, offset + 8)
+            result["platform"] = platform
+            result["min_os"] = f"{minos >> 16}.{(minos >> 8) & 0xff}.{minos & 0xff}"
+            result["sdk"] = f"{sdk >> 16}.{(sdk >> 8) & 0xff}.{sdk & 0xff}"
             break
+        if cmd in VERSION_MIN_PLATFORMS:
+            minos, sdk = struct.unpack_from("<II", data, offset + 8)
+            result["platform"] = VERSION_MIN_PLATFORMS[cmd]
+            result["min_os"] = f"{minos >> 16}.{(minos >> 8) & 0xff}.{minos & 0xff}"
+            result["sdk"] = f"{sdk >> 16}.{(sdk >> 8) & 0xff}.{sdk & 0xff}"
+            break
+        if cmdsize <= 0:
+            return {"error": f"invalid load command size {cmdsize} at offset {offset}"}
         offset += cmdsize
     return result
 
