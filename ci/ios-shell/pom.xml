@@ -11,7 +11,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
-    <gluonfx.version>1.0.28</gluonfx.version>
+    <gluonfx.version>1.0.25</gluonfx.version>
     <main.class>org.bluej.ipad.shell.BlueJShell</main.class>
     <app.identifier>org.bluej.ipad.shell</app.identifier>
   </properties>
@@ -47,6 +47,9 @@
           <releaseConfiguration>
             <vendor>BlueJ iPad feasibility spike</vendor>
             <description>Unofficial BlueJ-for-iPad runtime shell (no JavaFX)</description>
+            <!-- No Apple identity or provisioning profile exists for this repo, so the
+                 bundle and .ipa are produced unsigned and must be re-signed to install. -->
+            <skipSigning>true</skipSigning>
             <bundleName>BlueJShell</bundleName>
             <bundleShortVersion>0.1</bundleShortVersion>
             <bundleVersion>1</bundleVersion>
