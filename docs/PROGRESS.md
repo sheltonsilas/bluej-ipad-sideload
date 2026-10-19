@@ -1,51 +1,62 @@
 # Progress — BlueJ for iPad feasibility work
 
-Updated 2026-10-18. Repo: <https://github.com/sheltonsilas/bluej-ipad-sideload> (public, unofficial).
+Updated 2026-10-19. Repo: <https://github.com/sheltonsilas/bluej-ipad-sideload> (public, unofficial).
+Release: [`v0.1.0-phase0`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.1.0-phase0).
 
 ## Where this stands
 
-Phase 0 (feasibility) is being closed with evidence rather than opinion. Three of the four
-required proofs have reproducible evidence; the fourth (a native iOS build) is being
-iterated in CI.
+**Phase 0 (feasibility) is complete.** All four required proofs have reproducible evidence,
+the last two of them in CI, and the resulting unsigned iOS builds are released with checksums.
 
 | # | Proof | Evidence | Status |
 | --- | --- | --- | --- |
-| A | ECJ compiles a Java source string to bytecode in process | `spike-java` `InMemoryCompilerTest` (2 tests) on Windows and in [CI run 39092304323](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39092304323) | Proven, test scope only |
-| B | An interpreter executes compiled bytecode | `spike-java` `InterpreterTest` (3 tests): arithmetic, string constants, field state, explicit failure on an unsupported opcode | Proven, narrow prototype |
-| C | Method invocation on an interpreted object | Constructor plus `increment(5) == 9`, `doubled() == 18`, field inspection; also `ci/ios-shell` `BlueJShell` self-test (6 checks) on Windows and Linux | Proven, narrow prototype |
-| D | JavaFX/Java app built for iOS that yields an unsigned `.ipa` | GluonFX matrix in `.github/workflows/ios-spike.yml` | In progress |
+| A | ECJ compiles a Java source string to bytecode in process | `spike-java` `InMemoryCompilerTest` (2 tests) on Windows and in [run 39205053696](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39205053696) | Proven, test scope only |
+| B | An interpreter executes compiled bytecode | `InterpreterTest` (3 tests): arithmetic, string constants, field state, explicit failure on an unsupported opcode | Proven, narrow prototype |
+| C | Method invocation on an interpreted object | Constructor plus `increment(5) == 9`, `doubled() == 18`, field inspection; `BlueJShell` host self-test 6/6 | Proven, narrow prototype |
+| D | Java app built for iOS that yields an unsigned `.ipa` | [run 39205053650](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39205053650): three green macOS jobs, arm64 iOS IPAs verified in CI by `ci/tools/verify-ipa.py` | Proven |
+
+## Released artifacts
+
+Both are **unsigned** and must be re-signed (e.g. with SideStore/AltStore and the user's own
+Apple ID) before an iPad installs them. They are evidence that the toolchain works, not a
+usable IDE.
+
+| File | SHA-256 | Size |
+| --- | --- | --- |
+| `HelloApp-unsigned.ipa` | `57e24a0b5d5279c9550b9632cab27892616b1bf3e24909a2140ab35fb42091a0` | 23,980,645 B |
+| `BlueJShell-unsigned.ipa` | `683c7b097cc4fa8a9dece1990a5f4c22dc7b0743ce63190dc5d925cb886541a5` | 15,193,593 B |
 
 ## Local host work (Windows, no admin)
 
-- Portable toolchain installed in user scope: Temurin `21.0.12.1+1` and Maven `3.9.16` under
-  `ipados-ubuntu/tools/`, with `tools/mvn.sh` as a path-safe wrapper. No machine-wide install
-  and no admin rights were used.
-- Keep-awake: sleep and hibernate timeouts are 0 on AC and DC, the display sleeps after one
-  minute while the system stays up, and a hidden PowerShell worker holds
-  `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` every 30 seconds. A watchdog
-  relaunches the worker if it dies. The lid action was set to "do nothing" but this power
-  scheme does not expose `LIDACTION` to `powercfg /query`, so that part is unverified; see
-  [ISSUES.md](../ISSUES.md) entries H4 and the backup at `C:/Users/Ramya/power_settings_backup.txt`.
-- Local evidence files: [docs/evidence/](evidence/).
+- Portable toolchain in user scope: Temurin `21.0.12.1+1` and Maven `3.9.16` under
+  `ipados-ubuntu/tools/`, with `tools/mvn.sh` as a path-safe wrapper. No admin rights used.
+- Keep-awake: sleep and hibernate timeouts 0 on AC and DC, display sleeps after one minute
+  while the system stays up, and a hidden PowerShell worker holds
+  `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` every 30 s with a watchdog
+  that relaunches it. The lid action was set to "do nothing" but this scheme does not expose
+  `LIDACTION` to `powercfg /query`; see ISSUES.md H4.
 
 ## iOS build path
 
-- `.github/workflows/ios-spike.yml` builds on macOS runners only (no local Xcode). It now runs
-  a matrix over module (JavaFX hello vs. no-JavaFX runtime shell), GluonFX plugin version and
-  host architecture, and uploads the app bundle, an unsigned `.ipa`, and the full native build
-  log for every attempt.
+- `.github/workflows/ios-spike.yml` builds on macOS runners only (no local Xcode), matrix:
+  interpreter shell on `macos-15-intel`, JavaFX hello on `macos-15-intel` and on `macos-15`.
 - Gluon's GraalVM (`gluonhq/setup-graalvm@master`, `gluon-23+25.1-dev`, JDK 23) is required;
   `actions/setup-java` cannot provide it.
-- Both modules declare `<target>${gluonfx.target}</target>` and `ios`/`ios-sim` profiles; the
-  earlier workflow built nothing for iOS because the target never reached the plugin.
-- Build obstacles so far, with the workaround applied, are recorded in [ISSUES.md](../ISSUES.md):
-  missing GraalVM distribution, missing iOS target, an incomplete CAP cache in Substrate
-  0.0.68/0.0.69, EPL-2.0 ECJ licensing, and the absence of any Apple signing identity.
+- **GluonFX 1.0.25 / Substrate 0.0.65 is pinned**: newer Substrate versions dropped CAP-cache
+  files the Gluon GraalVM needs, so native-image aborts with `Could not load CAPCache file`.
+  The full attempt history is in [SPIKE_REPORT.md](SPIKE_REPORT.md).
+- `gluonfx:package` runs with `<skipSigning>true</skipSigning>` and produces the real `.app`
+  bundle plus `.ipa`; CI then asserts the archive is intact, has an `Info.plist` for
+  `iPhoneOS`, and contains an arm64 Mach-O executable with `LC_BUILD_VERSION platform=2`.
+
+## Next: Phase 1
+
+Architecture and the ordered task list are in [SPIKE_REPORT.md](SPIKE_REPORT.md#chosen-architecture-phase-1-input):
+native SwiftUI/UIKit shell, GraalVM-native Java core, extended interpreter, interpreter-native
+debugger, and replacement of the EPL-2.0 ECJ dependency before any product use.
 
 ## What is deliberately not claimed
 
-- No signed, App Store-installable IPA. The build is unsigned and needs re-signing by whoever
-  installs it.
+- No signed, App Store-installable IPA.
 - No BlueJ feature parity: [PARITY.md](../PARITY.md) still marks every product workflow
   unsupported or partial, because no BlueJ UI exists in this fork yet.
-- No production architecture decision yet; see [DECISIONS.md](DECISIONS.md).

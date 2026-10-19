@@ -1,11 +1,15 @@
 # BlueJ for iPad (unofficial port)
 
-This is an **unofficial community port feasibility fork** of BlueJ, not endorsed by the BlueJ team or King's College London. The BlueJ name and logo are used pending permission and will be renamed on request. It is not currently an iPad app; this repository does not claim iOS build or feature parity.
+This is an **unofficial community port feasibility fork** of BlueJ, not endorsed by the BlueJ team or King's College London. The BlueJ name and logo are used pending permission and will be renamed on request. It is not currently a usable iPad IDE; this repository does not claim BlueJ feature parity.
+
+What does exist: Phase 0 feasibility is complete, and the [`v0.1.0-phase0`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.1.0-phase0) release carries two **unsigned** arm64 iOS IPAs built in CI — a JavaFX hello app and a GraalVM-native shell hosting the experimental bytecode interpreter. They must be re-signed (for example with SideStore/AltStore and your own Apple ID) before an iPad will install them.
 
 Upstream: [k-pet-group/BlueJ-Greenfoot](https://github.com/k-pet-group/BlueJ-Greenfoot), initially pinned at commit `bf11ce44a6dcb866921485dd43fb31411dc32937`. The project remains under the upstream GPLv2 with Classpath Exception; see [LICENSE.txt](LICENSE.txt), [NOTICE](NOTICE), and upstream third-party license inventories.
 
 - App name configuration: [app.properties](app.properties).
-- Feasibility results: [docs/SPIKE_REPORT.md](docs/SPIKE_REPORT.md).
+- Feasibility results and the chosen architecture: [docs/SPIKE_REPORT.md](docs/SPIKE_REPORT.md).
+- Current status and evidence: [docs/PROGRESS.md](docs/PROGRESS.md), [docs/STATE.json](docs/STATE.json).
+- Obstacles and workarounds: [ISSUES.md](ISSUES.md).
 - Feature parity tracker: [PARITY.md](PARITY.md).
 - Test-only interpreter prototype: [spike-java/](spike-java/).
 

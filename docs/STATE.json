@@ -1,34 +1,36 @@
 {
-  "phase": "0-feasibility-spike",
+  "phase": "1-native-ipad-shell",
+  "phase0_complete": true,
   "repo": "https://github.com/sheltonsilas/bluej-ipad-sideload",
-  "last_green_commit": "9337254cd",
+  "last_green_commit": "b553f532e",
   "evidence": {
-    "A_ecj_in_process_compile": "pass — 2 tests, local (Temurin 21 + Maven 3.9.16) and CI run 39092304323 (Java feasibility tests)",
-    "B_bytecode_interpreter": "pass — prototype; 3 interpreter tests covering arithmetic, string constants, field state, object construction and explicit failure on unsupported opcodes",
-    "C_interpreted_object_method_call": "pass — prototype; constructor, increment(5)=9, doubled()=18, field inspection; plus the iOS shell entry point self-test (6/6 checks) verified on Windows and on Linux CI",
-    "D_ios_native_build": "in progress — first attempts reached native-image for arm64-apple-ios and failed on an incomplete Gluon CAP cache; fix pushed, matrix run pending"
+    "A_ecj_in_process_compile": "pass — 2 tests locally (Temurin 21 + Maven 3.9.16) and in CI run 39205053696 (Java feasibility tests); ECJ 3.40.0 is EPL-2.0 and test-scope only",
+    "B_bytecode_interpreter": "pass — prototype; InterpreterTest covers arithmetic, strings, field state, object construction, method calls and explicit failure on unsupported opcodes",
+    "C_interpreted_object_method_call": "pass — constructor, increment(5)=9, doubled()=18, field inspection; BlueJShell host self-test 6/6 on Windows and Linux",
+    "D_ios_native_build": "pass — CI run 39205053650, three green macOS jobs; unsigned .ipa artifacts with Info.plist (iPhoneOS, MinimumOSVersion 11.0) and arm64 Mach-O (LC_BUILD_VERSION platform=2, SDK 18.5) verified by ci/tools/verify-ipa.py"
+  },
+  "release": {
+    "tag": "v0.1.0-phase0",
+    "assets": [
+      {"name": "HelloApp-unsigned.ipa", "sha256": "57e24a0b5d5279c9550b9632cab27892616b1bf3e24909a2140ab35fb42091a0", "bytes": 23980645},
+      {"name": "BlueJShell-unsigned.ipa", "sha256": "683c7b097cc4fa8a9dece1990a5f4c22dc7b0743ce63190dc5d925cb886541a5", "bytes": 15193593}
+    ],
+    "signed": false,
+    "installable_without_resigning": false
+  },
+  "architecture": {
+    "ui": "native SwiftUI/UIKit shell (JavaFX does not run interactively on iOS: no AWT/Swing, no Prism on a no-JIT device)",
+    "core": "GraalVM-native Java core hosting the in-process bytecode runtime",
+    "execution": "org.bluej.ipad.spike interpreter, extended to the BlueJ-intro subset, instruction budgets for cancellation",
+    "compiler": "open — ECJ 3.40.0 is EPL-2.0 and cannot ship in the GPLv2+CE app; evaluate the bundled OpenJDK javac",
+    "debugger": "interpreter-native breakpoints/step/variables; JDI is impossible for interpreted frames on iOS"
   },
   "open_tasks": [
-    "Confirm -H:-UseCAPCache lets GluonFX 1.0.28/1.0.29 produce an unsigned .ipa in CI (run 39092867370)",
-    "Publish the verified unsigned .ipa as a GitHub release asset with a SHA-256 checksum",
+    "Grow the interpreter to the BlueJ-intro subset (branches, arrays, exceptions, strings, statics, recursion) with a conformance suite",
+    "Define the Java-core <-> Swift-UI interface and a headless harness for it",
     "Replace the EPL-2.0 ECJ test dependency with a GPL-compatible in-process compiler before product use",
-    "Lead the interpreter beyond the prototype subset (branches, invokes on JDK classes, exceptions, arrays, static init)",
-    "Design the iPad UI path once a native iOS build is reproducible",
+    "Implement the interpreter debug hook (breakpoints/step/variables) with tests",
     "Request permission for the BlueJ name/logo or rename the port"
-  ],
-  "running_jobs": [
-    {
-      "name": "iOS feasibility spike",
-      "run_id": 39092867370,
-      "jobs": [
-        "plain-java 1.0.28",
-        "plain-java 1.0.29",
-        "javafx 1.0.28",
-        "javafx 1.0.29",
-        "javafx 1.0.28 (arm64 host)"
-      ],
-      "started_utc": "2026-10-18T03:13:38Z"
-    }
   ],
   "host": {
     "os": "Windows 11",
@@ -47,6 +49,6 @@
       "monitor_dir": "%TEMP%/bluej-ipad-monitor"
     }
   },
-  "last_heartbeat_utc": "2026-10-18T03:15:00Z",
-  "notes": "Local proofs A/B/C have reproducible evidence in docs/evidence/. Proof D is a GluonFX matrix run; no signed or installable-by-default IPA exists and no parity claim is made."
+  "last_heartbeat_utc": "2026-10-19T05:40:00Z",
+  "notes": "Phase 0 closed with CI evidence. No signed IPA exists and no BlueJ feature parity is claimed."
 }
