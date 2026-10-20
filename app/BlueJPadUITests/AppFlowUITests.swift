@@ -37,9 +37,12 @@ final class AppFlowUITests: XCTestCase {
         attach("01-project-browser")
 
         welcome.tap()
+        XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 20), "the project should open")
+        attach("02-project-opened")
 
         let counter = element("class-Counter")
-        XCTAssertTrue(counter.waitForExistence(timeout: 30), "compiling on open should draw the class diagram")
+        XCTAssertTrue(counter.waitForExistence(timeout: 30),
+                      "compiling on open should draw the class diagram\n\(app.debugDescription)")
         attach("02-class-diagram")
 
         counter.tap()
@@ -86,7 +89,8 @@ final class AppFlowUITests: XCTestCase {
 
     func testCreateAClassEditItAndCompile() throws {
         launch(openingProject: "Welcome")
-        XCTAssertTrue(element("class-Counter").waitForExistence(timeout: 30))
+        XCTAssertTrue(element("class-Counter").waitForExistence(timeout: 30),
+                      "the Welcome project should open and compile\n\(app.debugDescription)")
 
         element("newClassButton").tap()
         let name = element("classNameField")

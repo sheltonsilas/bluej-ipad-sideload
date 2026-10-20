@@ -81,9 +81,13 @@ public final class CoreServer implements AutoCloseable {
                         + "\"message\":\"request too large\",\"unsupported\":false}}");
                 return;
             }
+            String request = new String(body, StandardCharsets.UTF_8);
             String response;
+            long started = System.nanoTime();
             try {
-                response = protocol.handle(new String(body, StandardCharsets.UTF_8));
+                response = protocol.handle(request);
+                System.out.println("[rpc] " + summarize(request) + " ("
+                        + (System.nanoTime() - started) / 1_000_000 + " ms) -> " + summarize(response));
             } catch (RuntimeException failure) {
                 response = "{\"error\":{\"class\":\"" + failure.getClass().getName()
                         + "\",\"message\":\"server failure\",\"unsupported\":false}}";
@@ -113,6 +117,11 @@ public final class CoreServer implements AutoCloseable {
     }
 
     public CoreSession session() { return session; }
+
+    private static String summarize(String json) {
+        String single = json.replace('\n', ' ').replace('\r', ' ').trim();
+        return single.length() <= 220 ? single : single.substring(0, 220) + "...";
+    }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

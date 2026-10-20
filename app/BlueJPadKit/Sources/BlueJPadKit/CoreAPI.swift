@@ -10,7 +10,13 @@ public struct CoreAPI: Sendable {
     }
 
     private func call(_ request: JSONValue) async throws -> JSONValue {
-        try await client.send(request)
+        let response = try await client.send(request)
+        // Transports may hand back the error payload untouched; turn it into a typed failure
+        // here so every caller sees the same thing.
+        if let failure = response["error"] {
+            throw CoreError.core(CoreFailure(json: failure))
+        }
+        return response
     }
 
     // MARK: - Project

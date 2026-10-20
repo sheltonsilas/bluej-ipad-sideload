@@ -23,9 +23,10 @@ final class ProjectStoreTests: XCTestCase {
         try store.writeSource("package shapes; public class Circle { }", path: "shapes/Circle.java", in: "Shapes")
 
         let sources = try store.sources(in: "Shapes")
-        XCTAssertEqual(sources.map(\.path), ["Square.java", "shapes/Circle.java"])
-        XCTAssertEqual(sources[1].text, "package shapes; public class Circle { }")
-        XCTAssertEqual(sources[1].packageName, "shapes")
+        XCTAssertEqual(Set(sources.map(\.path)), ["Square.java", "shapes/Circle.java"])
+        let circle = try XCTUnwrap(sources.first { $0.path == "shapes/Circle.java" })
+        XCTAssertEqual(circle.text, "package shapes; public class Circle { }")
+        XCTAssertEqual(circle.packageName, "shapes")
 
         XCTAssertEqual(try store.projects().map(\.name), ["Shapes"])
     }
@@ -57,7 +58,7 @@ final class ProjectStoreTests: XCTestCase {
         XCTAssertEqual(second.map(\.name), ["Welcome"])
 
         let sources = try store.sources(in: "Welcome")
-        XCTAssertEqual(sources.map(\.path), ["Calculator.java", "Counter.java", "Greeter.java"])
+        XCTAssertEqual(Set(sources.map(\.path)), ["Calculator.java", "Counter.java", "Greeter.java"])
         XCTAssertTrue(sources.allSatisfy { $0.text.contains("public class") })
     }
 

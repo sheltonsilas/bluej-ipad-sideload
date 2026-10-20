@@ -26,7 +26,7 @@ public enum CoreValue: Equatable, Hashable, Sendable {
     case array(component: String, items: [CoreValue])
 
     public init?(json: JSONValue) {
-        if json.isNull {
+        if json.isNull || json["null"]?.boolValue == true {
             self = .null
             return
         }

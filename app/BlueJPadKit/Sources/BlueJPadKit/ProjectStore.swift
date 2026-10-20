@@ -115,10 +115,15 @@ public struct ProjectStore: Sendable {
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
+        // Compare resolved paths: on macOS /tmp is a symlink to /private/tmp, and the
+        // enumerator reports the resolved form.
+        let baseComponents = base.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         var files: [SourceFile] = []
         for case let url as URL in walker {
             guard url.pathExtension == "java" else { continue }
-            let relative = url.path.replacingOccurrences(of: base.path + "/", with: "")
+            let components = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            guard components.count > baseComponents.count else { continue }
+            let relative = components.dropFirst(baseComponents.count).joined(separator: "/")
             let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             files.append(SourceFile(path: relative, text: text))
         }

@@ -166,6 +166,7 @@ struct ClassBoxView: View {
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("class-name-\(card.name)")
 
                 if let parent = card.projectSuperclass {
                     Text("extends \(CoreValue.simpleName(parent))")
