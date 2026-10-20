@@ -79,15 +79,37 @@ final class ModelAndLayoutTests: XCTestCase {
         }
     }
 
-    func testLayoutKeepsEveryClassVisible() {
+    func testLayoutWrapsWithoutOverlappingOnANarrowCanvas() {
         let cards = (1...12).map { card("Class\($0)") }
         let frames = ClassDiagramLayout.layout(
             cards: cards,
-            canvas: DiagramSize(width: 1024, height: 700),
-            node: DiagramSize(width: 150, height: 80)
+            canvas: DiagramSize(width: 500, height: 800),
+            node: DiagramSize(width: 176, height: 116)
         )
         XCTAssertEqual(frames.count, 12)
-        XCTAssertEqual(Set(frames.values.map(\.center.y)).count, 1)
+        let all = Array(frames.values)
+        for i in 0..<all.count {
+            for j in (i + 1)..<all.count {
+                XCTAssertFalse(all[i].intersects(all[j]), "cards \(i) and \(j) overlap")
+            }
+        }
+        XCTAssertGreaterThan(Set(frames.values.map(\.minY)).count, 1, "a narrow canvas should wrap")
+    }
+
+    func testLayoutFitsThreeClassesSideBySideWhenThereIsRoom() {
+        let cards = [card("Calculator"), card("Counter"), card("Greeter")]
+        let frames = ClassDiagramLayout.layout(
+            cards: cards,
+            canvas: DiagramSize(width: 680, height: 1000),
+            node: DiagramSize(width: 176, height: 116)
+        )
+        let ordered = ["Calculator", "Counter", "Greeter"].compactMap { frames[$0] }
+        XCTAssertEqual(ordered.count, 3)
+        XCTAssertEqual(Set(ordered.map(\.minY)).count, 1)
+        XCTAssertLessThan(ordered[0].maxX, ordered[1].minX)
+        XCTAssertLessThan(ordered[1].maxX, ordered[2].minX)
+        XCTAssertGreaterThanOrEqual(ordered[2].maxX, 0)
+        XCTAssertLessThanOrEqual(ordered[2].maxX, 680)
     }
 
     func testHighlightingFindsKeywordsTypesStringsAndComments() {

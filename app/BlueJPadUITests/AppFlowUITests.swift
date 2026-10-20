@@ -40,22 +40,30 @@ final class AppFlowUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 20), "the project should open")
         attach("02-project-opened")
 
-        let counter = element("class-Counter")
-        XCTAssertTrue(counter.waitForExistence(timeout: 30),
+        let counter = app.staticTexts["Counter"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 45),
                       "compiling on open should draw the class diagram\n\(app.debugDescription)")
         attach("02-class-diagram")
+
+        // The three Welcome classes must not overlap in the diagram.
+        let calculator = app.staticTexts["Calculator"]
+        let greeter = app.staticTexts["Greeter"]
+        if calculator.exists && greeter.exists {
+            XCTAssertFalse(counter.frame.intersects(calculator.frame), "Counter overlaps Calculator")
+            XCTAssertFalse(counter.frame.intersects(greeter.frame), "Counter overlaps Greeter")
+        }
 
         counter.tap()
         let create = element("instantiateButton")
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.tap()
 
-        let benchCard = element("bench-counter1")
+        let benchCard = app.staticTexts["counter1"]
         XCTAssertTrue(benchCard.waitForExistence(timeout: 20), "creating an object should put it on the bench")
         attach("03-object-bench")
 
         element("inspect-counter1").tap()
-        XCTAssertTrue(element("inspector").waitForExistence(timeout: 10), "the inspector should open")
+        XCTAssertTrue(app.staticTexts["Inspector"].waitForExistence(timeout: 10), "the inspector should open")
         attach("04-inspector")
 
         element("methods-counter1").tap()
@@ -89,7 +97,7 @@ final class AppFlowUITests: XCTestCase {
 
     func testCreateAClassEditItAndCompile() throws {
         launch(openingProject: "Welcome")
-        XCTAssertTrue(element("class-Counter").waitForExistence(timeout: 30),
+        XCTAssertTrue(app.staticTexts["Counter"].waitForExistence(timeout: 45),
                       "the Welcome project should open and compile\n\(app.debugDescription)")
 
         element("newClassButton").tap()
@@ -114,7 +122,10 @@ final class AppFlowUITests: XCTestCase {
         attach("09-after-save")
 
         element("compileButton").tap()
-        XCTAssertTrue(element("workspaceStatus").waitForExistence(timeout: 10))
+        let compiled = app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "Compiled")
+        ).firstMatch
+        XCTAssertTrue(compiled.waitForExistence(timeout: 30), "compiling should report how many classes built")
         attach("10-compiled")
     }
 }

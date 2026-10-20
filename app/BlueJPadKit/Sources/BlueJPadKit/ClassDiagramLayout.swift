@@ -33,10 +33,14 @@ public struct DiagramRect: Equatable, Sendable {
         DiagramPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
     }
 
-    public var minY: Double { origin.y }
-    public var maxY: Double { origin.y + size.height }
     public var minX: Double { origin.x }
+    public var minY: Double { origin.y }
     public var maxX: Double { origin.x + size.width }
+    public var maxY: Double { origin.y + size.height }
+
+    public func intersects(_ other: DiagramRect) -> Bool {
+        minX < other.maxX && other.minX < maxX && minY < other.maxY && other.minY < maxY
+    }
 }
 
 public struct DiagramEdge: Hashable, Sendable {
@@ -49,8 +53,9 @@ public struct DiagramEdge: Hashable, Sendable {
     }
 }
 
-/// Lays the class diagram out in rows by inheritance depth: base classes on top, subclasses
-/// below them, siblings side by side. Pure functions so the geometry is testable without a UI.
+/// Lays the class diagram out in rows by inheritance depth: base classes above their
+/// subclasses, siblings side by side, wrapping when the canvas is too narrow for one row.
+/// Pure functions so the geometry is testable without a UI.
 public enum ClassDiagramLayout {
 
     public static func inheritanceDepth(of card: ClassCard, in cards: [ClassCard]) -> Int {
@@ -82,7 +87,8 @@ public enum ClassDiagramLayout {
         canvas: DiagramSize,
         node: DiagramSize,
         margin: Double = 24,
-        gap: Double = 20
+        gap: Double = 20,
+        rowGap: Double = 34
     ) -> [String: DiagramRect] {
         guard !cards.isEmpty else { return [:] }
 
@@ -90,46 +96,33 @@ public enum ClassDiagramLayout {
         for card in cards {
             rows[inheritanceDepth(of: card, in: cards), default: []].append(card.name)
         }
-        for (depth, names) in rows {
-            rows[depth] = names.sorted()
-        }
 
-        let maxDepth = rows.keys.max() ?? 0
-        var result: [String: DiagramRect] = [:]
-        let usableHeight = max(0, canvas.height - margin * 2 - node.height)
-        let usableWidth = max(0, canvas.width - margin * 2 - node.width)
+        let usableWidth = max(node.width, canvas.width - margin * 2)
+        // How many boxes fit side by side; at least one, even on a very narrow canvas.
+        let perRow = max(1, Int((usableWidth + gap) / (node.width + gap)))
+        var rects: [String: DiagramRect] = [:]
+        var rowIndex = 0
 
-        for (depth, names) in rows {
-            let rowY: Double
-            if maxDepth == 0 {
-                rowY = (canvas.height - node.height) / 2
-            } else {
-                rowY = margin + usableHeight * Double(depth) / Double(maxDepth)
-            }
-
-            let rowWidth = Double(names.count) * node.width + Double(max(0, names.count - 1)) * gap
-            let startX: Double
-            if names.count == 1 {
-                startX = (canvas.width - node.width) / 2
-            } else if rowWidth <= usableWidth + node.width {
-                startX = max(margin, (canvas.width - rowWidth) / 2)
-            } else {
-                startX = margin
-            }
-
-            for (index, name) in names.enumerated() {
-                let x = names.count == 1
-                    ? startX
-                    : min(max(margin, startX + Double(index) * (node.width + gap)),
-                          max(margin, canvas.width - margin - node.width))
-                result[name] = DiagramRect(
-                    x: x,
-                    y: max(margin, min(rowY, max(margin, canvas.height - margin - node.height))),
-                    width: node.width,
-                    height: node.height
-                )
+        for depth in rows.keys.sorted() {
+            let names = (rows[depth] ?? []).sorted()
+            var start = 0
+            while start < names.count {
+                let chunk = Array(names[start..<min(start + perRow, names.count)])
+                let rowWidth = Double(chunk.count) * node.width + Double(max(0, chunk.count - 1)) * gap
+                let startX = margin + max(0, (usableWidth - rowWidth) / 2)
+                let y = margin + Double(rowIndex) * (node.height + rowGap)
+                for (index, name) in chunk.enumerated() {
+                    rects[name] = DiagramRect(
+                        x: startX + Double(index) * (node.width + gap),
+                        y: y,
+                        width: node.width,
+                        height: node.height
+                    )
+                }
+                rowIndex += 1
+                start += chunk.count
             }
         }
-        return result
+        return rects
     }
 }

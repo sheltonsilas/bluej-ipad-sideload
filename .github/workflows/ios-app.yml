@@ -54,7 +54,7 @@ jobs:
           test -f "$JAR"
           nohup java -jar "$JAR" --port 8899 > /tmp/core.log 2>&1 &
           echo $! > /tmp/core.pid
-          for attempt in $(seq 1 40); do
+          for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8899/health > /tmp/health.json 2>/dev/null; then
               echo "core is up: $(cat /tmp/health.json)"
               exit 0

@@ -118,6 +118,21 @@ public final class CoreServer implements AutoCloseable {
 
     public CoreSession session() { return session; }
 
+    /**
+     * Compiles a throwaway class so the first real compile does not pay javac's cold-start
+     * cost. The app compiles as soon as a project opens, and the jar's first compile can take
+     * twenty seconds, so this runs before the server starts accepting requests.
+     */
+    public static void warmUp(CoreSession session) {
+        long started = System.nanoTime();
+        session.setSource("__Warmup.java", "public class __Warmup { public int value() { return 1; } }");
+        CoreSession.CompileReport report = session.compile();
+        session.deleteSource("__Warmup.java");
+        session.compile();
+        System.out.println("warmed up in " + (System.nanoTime() - started) / 1_000_000
+                + " ms (compile ok: " + report.success() + ")");
+    }
+
     private static String summarize(String json) {
         String single = json.replace('\n', ' ').replace('\r', ' ').trim();
         return single.length() <= 220 ? single : single.substring(0, 220) + "...";
@@ -150,7 +165,9 @@ public final class CoreServer implements AutoCloseable {
                 return;
             }
         }
-        CoreServer server = start(port);
+        CoreSession session = new CoreSession();
+        warmUp(session);
+        CoreServer server = start(port, session);
         System.out.println("BlueJ iPad core listening on " + server.baseUri());
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
         Thread.currentThread().join();
