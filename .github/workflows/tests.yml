@@ -25,3 +25,8 @@ jobs:
 
       - name: Run the iOS shell entry point on the host JVM
         run: bash ci/ios-shell/tools/selftest-host.sh
+
+      - name: Build and test the core server
+        run: |
+          mvn -B -q -f spike-java/pom.xml install -DskipTests
+          mvn -B -f core-server/pom.xml test

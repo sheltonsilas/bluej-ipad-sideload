@@ -79,6 +79,18 @@ public final class Workspace: ObservableObject {
         }
     }
 
+    public func closeProject() {
+        project = nil
+        files = []
+        classes = []
+        bench = []
+        diagnostics = []
+        console = []
+        selectedClass = nil
+        status = "Choose a project"
+        refreshProjects()
+    }
+
     public func refreshProjects() {
         do {
             projects = try store.projects()
@@ -244,12 +256,12 @@ public final class Workspace: ObservableObject {
     // MARK: - Bench
 
     @discardableResult
-    public func instantiate(_ className: String) async -> BenchObject? {
+    public func instantiate(_ className: String, arguments: [CoreValue] = []) async -> BenchObject? {
         guard !isBusy else { return nil }
         isBusy = true
         defer { isBusy = false }
         do {
-            let object = try await api.instantiate(className: className)
+            let object = try await api.instantiate(className: className, arguments: arguments)
             bench = try await api.bench()
             connection = .ready
             await captureOutput()

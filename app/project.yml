@@ -1,0 +1,79 @@
+name: BlueJPad
+options:
+  bundleIdPrefix: org.bluej.ipad
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "17.0"
+
+packages:
+  BlueJPadKit:
+    path: BlueJPadKit
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+targets:
+  BlueJPad:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: BlueJPad
+    dependencies:
+      - package: BlueJPadKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.bluej.ipad.app
+        PRODUCT_NAME: BlueJ
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: NO
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+    info:
+      path: BlueJPad/Info.plist
+      properties:
+        CFBundleDisplayName: BlueJ
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: BlueJ compiles and runs Java on the project's Java core.
+
+  BlueJPadUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: BlueJPadUITests
+    dependencies:
+      - target: BlueJPad
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.bluej.ipad.app.uitests
+        TEST_TARGET_NAME: BlueJPad
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  BlueJPad:
+    build:
+      targets:
+        BlueJPad: all
+        BlueJPadUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - BlueJPadUITests
