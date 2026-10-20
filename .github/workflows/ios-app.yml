@@ -1,0 +1,28 @@
+name: BlueJ iPad app
+
+# Builds the SwiftUI app in the iOS simulator, drives it with XCUITest against the real Java
+# core (over loopback HTTP), and keeps the screenshots as artifacts. Nothing is signed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kit-tests:
+    name: Swift model and protocol tests
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test BlueJPadKit
+        working-directory: app/BlueJPadKit
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee /tmp/kit-tests.log

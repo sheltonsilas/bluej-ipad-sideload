@@ -13,10 +13,10 @@ import java.util.Map;
  * arrays, strings with escapes, numbers, booleans and null. Integral numbers parse as
  * {@link Long}, fractional numbers as {@link Double}.
  */
-final class Json {
+public final class Json {
     private Json() {}
 
-    static Object parse(String text) {
+    public static Object parse(String text) {
         Parser parser = new Parser(text);
         Object value = parser.readValue();
         parser.skipWhitespace();
@@ -24,7 +24,7 @@ final class Json {
         return value;
     }
 
-    static String write(Object value) {
+    public static String write(Object value) {
         StringBuilder out = new StringBuilder();
         writeValue(out, value);
         return out.toString();

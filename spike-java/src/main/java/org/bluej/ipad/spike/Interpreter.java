@@ -103,6 +103,16 @@ public final class Interpreter {
 
     public List<String> loadedClasses() { return List.copyOf(classes.keySet()); }
 
+    /** Drops all loaded classes, static state and captured output. */
+    public void reset() {
+        classes.clear();
+        staticFields.clear();
+        initialized.clear();
+        initializing.clear();
+        output.setLength(0);
+        executed = 0;
+    }
+
     // ---------------------------------------------------------------- entry points
 
     public InterpretedObject newObject(String className, Value... arguments) {

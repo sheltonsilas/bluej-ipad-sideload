@@ -17,18 +17,22 @@ import org.bluej.ipad.spike.Value;
  * synchronous so the UI can treat every call as a request/response pair.
  *
  * <pre>
- * request                                  response
- * {"op":"classes"}                         {"classes":[...]}
- * {"op":"new","class":"Counter","args":[{"int":4}]}
- *                                          {"handle":1,"class":"Counter","fields":{...}}
- * {"op":"invoke","handle":1,"method":"increment","args":[{"int":5}]}
- *                                          {"value":{"int":9}}
- * {"op":"invokeStatic","class":"Counter","method":"sumTo","args":[{"int":6}]}
- *                                          {"value":{"int":30}}
- * {"op":"inspect","handle":1}              {"handle":1,"class":"Counter","fields":{...}}
- * {"op":"bench"}                           {"bench":[...]}
- * {"op":"output"}                          {"output":"hello\n"}
- * {"op":"clearOutput"}                     {"cleared":true}
+ * request                                                    response
+ * {"op":"sources"}                                           {"sources":[{path,text,type}]}
+ * {"op":"setSource","path":"Counter.java","text":"..."}      {"saved":true,"revision":3}
+ * {"op":"newClass","name":"Dog","kind":"class"}              {"path":"Dog.java","text":"...","revision":4}
+ * {"op":"compile"}                                           {success,revision,classes,diagnostics}
+ * {"op":"classes"}                                           {"classes":[...]}
+ * {"op":"new","class":"Counter","args":[{"int":4}]}          {"handle":1,"name":"counter1",...}
+ * {"op":"invoke","handle":1,"method":"increment","args":[…]} {"value":{"int":9}}
+ * {"op":"invokeStatic","class":"Counter","method":"sumTo"}   {"value":{"int":30}}
+ * {"op":"inspect","handle":1}                                {"handle":1,"class":"Counter","fields":{…}}
+ * {"op":"bench"}                                             {"bench":[...]}
+ * {"op":"removeObject","handle":1}                           {"removed":true}
+ * {"op":"clearBench"}                                        {"cleared":true}
+ * {"op":"output"}                                            {"output":"hello\n"}
+ * {"op":"clearOutput"}                                       {"cleared":true}
+ * {"op":"reset"}                                             {"reset":true}
  * </pre>
  *
  * <p>Values encode as {@code {"int":n}}, {@code {"double":d}}, {@code {"string":s}},
@@ -62,6 +66,14 @@ public final class CoreProtocol {
         String op = string(request.get("op"));
         return switch (op) {
             case "classes" -> Map.of("classes", classes());
+            case "sources" -> Map.of("sources", sources());
+            case "source" -> source(request);
+            case "setSource" -> Map.of("saved", true,
+                    "revision", session.setSource(string(request.get("path")), string(request.get("text"))));
+            case "deleteSource" -> Map.of("deleted", true,
+                    "revision", session.deleteSource(string(request.get("path"))));
+            case "newClass" -> newClass(request);
+            case "compile" -> compile();
             case "new" -> newObject(request);
             case "invoke" -> Map.of("value", encode(session.invoke(integer(request.get("handle")),
                     string(request.get("method")), arguments(request))));
@@ -69,15 +81,77 @@ public final class CoreProtocol {
                     string(request.get("method")), arguments(request))));
             case "inspect" -> encodeBench(session.inspect(integer(request.get("handle"))));
             case "bench" -> Map.of("bench", session.bench().stream().map(CoreProtocol::encodeBench).toList());
+            case "removeObject" -> { session.removeObject(integer(request.get("handle"))); yield Map.of("removed", true); }
+            case "clearBench" -> { session.clearBench(); yield Map.of("cleared", true); }
             case "output" -> Map.of("output", session.output());
             case "clearOutput" -> { session.clearOutput(); yield Map.of("cleared", true); }
+            case "reset" -> { session.reset(); yield Map.of("reset", true); }
             default -> throw new IllegalArgumentException("unknown op: " + op);
         };
+    }
+
+    private Map<String, Object> compile() {
+        CoreSession.CompileReport report = session.compile();
+        List<Object> diagnostics = new ArrayList<>();
+        for (ProjectCompiler.Diagnostic diagnostic : report.diagnostics()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("path", diagnostic.path());
+            entry.put("line", diagnostic.line());
+            entry.put("column", diagnostic.column());
+            entry.put("message", diagnostic.message());
+            entry.put("severity", diagnostic.severity().name().toLowerCase(java.util.Locale.ROOT));
+            diagnostics.add(entry);
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", report.success());
+        response.put("revision", report.revision());
+        response.put("classes", classes());
+        response.put("diagnostics", diagnostics);
+        response.put("output", Map.of("text", session.output()));
+        return response;
+    }
+
+    private Map<String, Object> source(Map<?, ?> request) {
+        String path = string(request.get("path"));
+        String text = session.source(path);
+        if (text == null) return Map.of("error", Map.of("class", "java.lang.IllegalArgumentException",
+                "message", "no such source: " + path, "unsupported", false));
+        return Map.of("path", path, "text", text);
+    }
+
+    private Map<String, Object> newClass(Map<?, ?> request) {
+        String simpleName = string(request.get("name")).trim();
+        if (!simpleName.matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
+            throw new IllegalArgumentException("invalid class name: " + simpleName);
+        }
+        String kind = request.get("kind") == null ? "class" : string(request.get("kind"));
+        String packageName = request.get("package") == null ? "" : string(request.get("package"));
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        session.classes().forEach(info -> existing.add(info.name()));
+        String binaryName = packageName.isBlank() ? simpleName : packageName + "." + simpleName;
+        if (existing.contains(binaryName)) {
+            throw new IllegalArgumentException("a class named " + simpleName + " already exists");
+        }
+        String path = (packageName.isBlank() ? "" : packageName.replace('.', '/') + "/") + simpleName + ".java";
+        long revision = session.setSource(path, CoreSession.newClassSource(simpleName, kind, packageName));
+        return Map.of("path", path, "text", session.source(path), "revision", revision);
     }
 
     private Map<String, Object> newObject(Map<?, ?> request) {
         BenchObject object = session.create(string(request.get("class")), arguments(request));
         return encodeBench(object);
+    }
+
+    private List<Object> sources() {
+        List<Object> result = new ArrayList<>();
+        session.sources().forEach((path, text) -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("path", path);
+            entry.put("text", text);
+            entry.put("type", ProjectCompiler.declaredTypeName(text));
+            result.add(entry);
+        });
+        return result;
     }
 
     private List<Object> classes() {
@@ -92,7 +166,16 @@ public final class CoreProtocol {
                 methods.add(Map.of("name", method.name(), "parameters", method.parameterTypes(),
                         "returns", method.returnType(), "static", method.isStatic()));
             }
-            result.add(Map.of("name", info.name(), "fields", fields, "methods", methods));
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", info.name());
+            entry.put("kind", info.kind());
+            entry.put("superclass", info.superclass());
+            entry.put("path", info.path());
+            entry.put("compiled", info.compiled());
+            entry.put("error", info.error());
+            entry.put("fields", fields);
+            entry.put("methods", methods);
+            result.add(entry);
         }
         return result;
     }
@@ -100,7 +183,12 @@ public final class CoreProtocol {
     private static Map<String, Object> encodeBench(BenchObject object) {
         Map<String, Object> fields = new LinkedHashMap<>();
         object.fields().forEach((name, value) -> fields.put(name, encode(value)));
-        return Map.of("handle", object.handle(), "class", object.className(), "fields", fields);
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("handle", object.handle());
+        entry.put("name", object.name());
+        entry.put("class", object.className());
+        entry.put("fields", fields);
+        return entry;
     }
 
     // ---------------------------------------------------------------- values
@@ -158,7 +246,7 @@ public final class CoreProtocol {
                 case "short" -> 10;
                 default -> 0;
             };
-            InterpretedArray created = new InterpretedArray(primitive, primitive == 0 ? component : component, items.size());
+            InterpretedArray created = new InterpretedArray(primitive, component, items.size());
             for (int i = 0; i < items.size(); i++) created.set(i, decode(items.get(i)));
             return new Value.ArrayValue(created);
         }
