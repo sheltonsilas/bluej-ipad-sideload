@@ -100,7 +100,7 @@ public enum CoreValue: Equatable, Hashable, Sendable {
         case .null: return "null"
         case .reference(let handle): return "bench #\(handle)"
         case .object(let className, let fields):
-            return "\(simpleName(className)) (\(fields.count) field\(fields.count == 1 ? "" : "s"))"
+            return "\(Self.simpleName(className)) (\(fields.count) field\(fields.count == 1 ? "" : "s"))"
         case .array(let component, let items):
             return "\(component)[\(items.count)]"
         }
@@ -111,7 +111,7 @@ public enum CoreValue: Equatable, Hashable, Sendable {
         switch self {
         case .string(let value): return value
         case .null: return "null"
-        case .object(let className, _): return "an instance of \(simpleName(className))"
+        case .object(let className, _): return "an instance of \(Self.simpleName(className))"
         case .array(let component, let items):
             return "[" + items.map(\.displayText).joined(separator: ", ") + "] (\(component) array)"
         default: return displayText

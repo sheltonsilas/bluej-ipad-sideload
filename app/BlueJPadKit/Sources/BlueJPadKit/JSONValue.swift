@@ -35,6 +35,10 @@ public enum JSONValue: Equatable, Sendable {
         .object(members)
     }
 
+    public static func obj(_ members: [JSONMember]) -> JSONValue {
+        .object(members)
+    }
+
     public static func obj(_ members: [String: JSONValue]) -> JSONValue {
         .object(members.map { JSONMember($0.key, $0.value) })
     }

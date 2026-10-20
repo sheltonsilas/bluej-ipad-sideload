@@ -131,11 +131,15 @@ public final class ScriptedCoreClient: CoreClient, @unchecked Sendable {
         return requests
     }
 
-    public func send(_ request: JSONValue) async throws -> JSONValue {
+    private func record(_ request: JSONValue) -> Handler {
         lock.lock()
+        defer { lock.unlock() }
         requests.append(request)
-        let current = handler
-        lock.unlock()
+        return handler
+    }
+
+    public func send(_ request: JSONValue) async throws -> JSONValue {
+        let current = record(request)
         return try current(request)
     }
 }
