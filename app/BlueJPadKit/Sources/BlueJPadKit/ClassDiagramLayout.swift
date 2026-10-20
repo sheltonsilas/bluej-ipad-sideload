@@ -39,7 +39,7 @@ public struct DiagramRect: Equatable, Sendable {
     public var maxX: Double { origin.x + size.width }
 }
 
-public struct DiagramEdge: Equatable, Sendable {
+public struct DiagramEdge: Hashable, Sendable {
     public let from: String
     public let to: String
 

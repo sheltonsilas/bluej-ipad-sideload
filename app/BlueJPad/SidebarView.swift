@@ -20,8 +20,8 @@ struct SidebarView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 benchSection
-                if let inspected {
-                    InspectorView(object: inspected) { inspected = nil }
+                if let object = inspected {
+                    InspectorView(object: object) { inspected = nil }
                 }
                 if let card = selectedCard {
                     ClassDetailView(

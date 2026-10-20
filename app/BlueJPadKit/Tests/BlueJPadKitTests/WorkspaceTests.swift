@@ -36,7 +36,9 @@ private final class FakeCore: @unchecked Sendable {
             JSONMember("handle", .int(1)),
             JSONMember("name", .string("counter1")),
             JSONMember("class", .string("Counter")),
-            JSONMember("fields", .obj(JSONMember("count", .obj(JSONMember("int", .int(0)))))
+            JSONMember("fields", .obj(
+                JSONMember("count", .obj(JSONMember("int", .int(0))))
+            ))
         )]
     }
 
@@ -65,7 +67,9 @@ private final class FakeCore: @unchecked Sendable {
             return .obj(
                 JSONMember("success", .bool(compileSucceeds)),
                 JSONMember("revision", .int(3)),
-                JSONMember("classes", .array(classNames.map { classJSON($0, compiled: compileSucceeds, error: !compileSucceeds) })),
+                JSONMember("classes", .array(classNames.map {
+                    classJSON($0, compiled: compileSucceeds, error: !compileSucceeds)
+                })),
                 JSONMember("diagnostics", .array(diagnostics.map { diagnostic in
                     .obj(
                         JSONMember("path", .string(diagnostic.path)),
@@ -82,7 +86,9 @@ private final class FakeCore: @unchecked Sendable {
                 JSONMember("handle", .int(1)),
                 JSONMember("name", .string("counter1")),
                 JSONMember("class", .string(request["class"]?.stringValue ?? "Counter")),
-                JSONMember("fields", .obj(JSONMember("count", .obj(JSONMember("int", .int(0)))))
+                JSONMember("fields", .obj(
+                    JSONMember("count", .obj(JSONMember("int", .int(0))))
+                ))
             )
         case "bench":
             return .obj(JSONMember("bench", .array(benchJSON())))
@@ -110,105 +116,132 @@ private final class FakeCore: @unchecked Sendable {
 @MainActor
 final class WorkspaceTests: XCTestCase {
 
-    private var root: URL!
-    private var store: ProjectStore!
-    private var core: FakeCore!
-    private var workspace: Workspace!
+    private struct Fixture {
+        let root: URL
+        let store: ProjectStore
+        let core: FakeCore
+        let workspace: Workspace
 
-    override func setUp() async throws {
-        root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("bluejpad-workspace-\(UUID().uuidString)", isDirectory: true)
-        store = ProjectStore(root: root)
-        core = FakeCore()
-        let fake = core!
-        workspace = Workspace(api: CoreAPI(client: ScriptedCoreClient(handler: { try fake.handle($0) })), store: store)
-        _ = try store.createProject(named: "Demo")
-        try store.writeSource("public class Counter { }", path: "Counter.java", in: "Demo")
+        func cleanUp() {
+            try? FileManager.default.removeItem(at: root)
+        }
     }
 
-    override func tearDown() async throws {
-        if let root { try? FileManager.default.removeItem(at: root) }
+    private func makeFixture() throws -> Fixture {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bluejpad-workspace-\(UUID().uuidString)", isDirectory: true)
+        let store = ProjectStore(root: root)
+        let core = FakeCore()
+        let workspace = Workspace(
+            api: CoreAPI(client: ScriptedCoreClient(handler: { try core.handle($0) })),
+            store: store
+        )
+        _ = try store.createProject(named: "Demo")
+        try store.writeSource("public class Counter { }", path: "Counter.java", in: "Demo")
+        return Fixture(root: root, store: store, core: core, workspace: workspace)
     }
 
     func testOpeningAProjectPushesSourcesAndCompiles() async throws {
-        await workspace.openProject("Demo")
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
 
-        XCTAssertEqual(workspace.project, "Demo")
-        XCTAssertEqual(workspace.files.map(\.path), ["Counter.java"])
-        XCTAssertEqual(workspace.classes.map(\.name), ["Counter"])
-        XCTAssertTrue(workspace.connection.isReady)
-        XCTAssertTrue(workspace.lastCompileSucceeded)
+        XCTAssertEqual(fixture.workspace.project, "Demo")
+        XCTAssertEqual(fixture.workspace.files.map(\.path), ["Counter.java"])
+        XCTAssertEqual(fixture.workspace.classes.map(\.name), ["Counter"])
+        XCTAssertTrue(fixture.workspace.connection.isReady)
+        XCTAssertTrue(fixture.workspace.lastCompileSucceeded)
 
-        let operations = core.operations
+        let operations = fixture.core.operations
         XCTAssertEqual(operations.first, "reset")
         XCTAssertTrue(operations.contains("setSource"))
         XCTAssertTrue(operations.contains("compile"))
     }
 
     func testFailedCompilationSurfacesDiagnosticsWithoutLosingTheProject() async throws {
-        core.compileSucceeds = false
-        core.diagnostics = [
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        fixture.core.compileSucceeds = false
+        fixture.core.diagnostics = [
             Diagnostic(path: "Counter.java", line: 4, column: 9, message: "';' expected", severity: "error")
         ]
-        await workspace.openProject("Demo")
+        await fixture.workspace.openProject("Demo")
 
-        XCTAssertFalse(workspace.lastCompileSucceeded)
-        XCTAssertEqual(workspace.compileErrors.count, 1)
-        XCTAssertEqual(workspace.classes.first?.error, true)
-        XCTAssertTrue(workspace.console.contains { $0.text.contains("Counter.java:4: ';' expected") })
+        XCTAssertFalse(fixture.workspace.lastCompileSucceeded)
+        XCTAssertEqual(fixture.workspace.compileErrors.count, 1)
+        XCTAssertEqual(fixture.workspace.classes.first?.error, true)
+        XCTAssertTrue(fixture.workspace.console.contains { $0.text.contains("Counter.java:4: ';' expected") })
     }
 
     func testInstantiateAndCallUpdateTheBenchAndConsole() async throws {
-        await workspace.openProject("Demo")
-        core.invokeResult = .int(3)
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+        fixture.core.invokeResult = .int(3)
 
-        let object = await workspace.instantiate("Counter")
+        let object = await fixture.workspace.instantiate("Counter")
         XCTAssertEqual(object?.name, "counter1")
-        XCTAssertEqual(workspace.bench.map(\.handle), [1])
+        XCTAssertEqual(fixture.workspace.bench.map(\.handle), [1])
 
-        let result = await workspace.call(handle: 1, method: "increment", arguments: [])
+        let result = await fixture.workspace.call(handle: 1, method: "increment", arguments: [])
         XCTAssertEqual(result, .int(3))
-        XCTAssertTrue(workspace.console.contains { $0.text.contains("counter1.increment() returned 3") })
+        XCTAssertTrue(fixture.workspace.console.contains { $0.text.contains("counter1.increment() returned 3") })
     }
 
     func testRuntimeExceptionsAreReportedLikeBlueJ() async throws {
-        await workspace.openProject("Demo")
-        core.invokeFailure = CoreFailure(className: "java.lang.ArithmeticException", message: "/ by zero", unsupported: false)
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+        fixture.core.invokeFailure = CoreFailure(
+            className: "java.lang.ArithmeticException",
+            message: "/ by zero",
+            unsupported: false
+        )
 
-        let result = await workspace.call(handle: 1, method: "divide", arguments: [])
+        let result = await fixture.workspace.call(handle: 1, method: "divide", arguments: [])
         XCTAssertNil(result)
-        XCTAssertTrue(workspace.console.contains {
+        XCTAssertTrue(fixture.workspace.console.contains {
             $0.isError && $0.text.contains("java.lang.ArithmeticException: / by zero")
         })
-        XCTAssertTrue(workspace.connection.isReady, "a student exception must not look like a broken core")
+        XCTAssertTrue(fixture.workspace.connection.isReady,
+                      "a student exception must not look like a broken core")
     }
 
     func testUnsupportedFeaturesGetAProductMessage() async throws {
-        await workspace.openProject("Demo")
-        core.invokeFailure = CoreFailure(className: "java.lang.UnsupportedOperationException",
-                                         message: "unsupported long", unsupported: true)
-        _ = await workspace.call(handle: 1, method: "widen", arguments: [])
-        XCTAssertTrue(workspace.console.contains { $0.text.contains("not supported on iPad yet") })
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+        fixture.core.invokeFailure = CoreFailure(
+            className: "java.lang.UnsupportedOperationException",
+            message: "unsupported long",
+            unsupported: true
+        )
+        _ = await fixture.workspace.call(handle: 1, method: "widen", arguments: [])
+        XCTAssertTrue(fixture.workspace.console.contains { $0.text.contains("not supported on iPad yet") })
     }
 
     func testCreatingAClassWritesTheFileAndSelectsIt() async throws {
-        await workspace.openProject("Demo")
-        let created = await workspace.newClass(named: "Dog")
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+        let created = await fixture.workspace.newClass(named: "Dog")
 
         XCTAssertEqual(created?.path, "Dog.java")
-        let onDisk = try store.sources(in: "Demo")
+        let onDisk = try fixture.store.sources(in: "Demo")
         XCTAssertEqual(onDisk.map(\.path), ["Counter.java", "Dog.java"])
         XCTAssertTrue(onDisk[1].text.contains("public class Dog"))
-        XCTAssertEqual(workspace.selectedClass, "Dog")
+        XCTAssertEqual(fixture.workspace.selectedClass, "Dog")
     }
 
     func testSavingASourcePersistsItAndMarksTheProjectDirty() async throws {
-        await workspace.openProject("Demo")
-        await workspace.saveSource(path: "Counter.java", text: "public class Counter { int x; }")
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+        await fixture.workspace.saveSource(path: "Counter.java", text: "public class Counter { int x; }")
 
-        let onDisk = try store.sources(in: "Demo")
+        let onDisk = try fixture.store.sources(in: "Demo")
         XCTAssertEqual(onDisk.first?.text, "public class Counter { int x; }")
-        XCTAssertTrue(workspace.needsCompile)
-        XCTAssertTrue(core.operations.contains("setSource"))
+        XCTAssertTrue(fixture.workspace.needsCompile)
+        XCTAssertTrue(fixture.core.operations.contains("setSource"))
     }
 }

@@ -116,6 +116,7 @@ struct ClassDiagramView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(Capsule().fill(Theme.panel.opacity(0.9)))
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("workspaceStatus")
     }
 }
@@ -198,7 +199,8 @@ struct ClassBoxView: View {
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 10))
-        .accessibilityIdentifier("class-\(card.name)")
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(card.kind) \(card.simpleName)")
+        .accessibilityIdentifier("class-\(card.name)")
     }
 }

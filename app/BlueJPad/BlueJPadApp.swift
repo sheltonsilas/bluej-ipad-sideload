@@ -20,9 +20,7 @@ final class AppModel: ObservableObject {
     let coreURL: URL
 
     init() {
-        let environment = ProcessInfo.processInfo.environment
-        let configured = environment["BLUEJ_CORE_URL"] ?? "http://127.0.0.1:8899"
-        let url = URL(string: configured) ?? URL(string: "http://127.0.0.1:8899")!
+        let url = CoreSettings().coreURL
         self.coreURL = url
         self.workspace = Workspace(
             api: CoreAPI(client: HTTPCoreClient(baseURL: url)),

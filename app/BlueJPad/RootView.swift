@@ -20,6 +20,7 @@ struct RootView: View {
 struct ProjectBrowserView: View {
     @ObservedObject var workspace: Workspace
     @State private var showingNewProject = false
+    @State private var showingSettings = false
     @State private var newProjectName = ""
     @State private var isWorking = false
 
@@ -77,6 +78,17 @@ struct ProjectBrowserView: View {
                 }
                 .accessibilityIdentifier("newProjectButton")
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Label("Core Settings", systemImage: "gearshape")
+                }
+                .accessibilityIdentifier("coreSettingsButton")
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            CoreSettingsSheet()
         }
         .alert("New Project", isPresented: $showingNewProject) {
             TextField("Project name", text: $newProjectName)
