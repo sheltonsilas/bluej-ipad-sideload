@@ -41,3 +41,7 @@ greenfoot/build
 /ci/*/target/
 /ci/ios-shell/.build-counter/
 /spike-java/target/
+/core-server/target/
+/app/BlueJPadKit/.build/
+/app/BlueJPad.xcodeproj/xcuserdata/
+/app/DerivedData/
