@@ -39,6 +39,8 @@ final class AppFlowUITests: XCTestCase {
         welcome.tap()
         XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 20), "the project should open")
         attach("02-project-opened")
+        print("--- element tree after opening the project ---")
+        print(app.debugDescription)
 
         let counter = app.staticTexts["Counter"]
         XCTAssertTrue(counter.waitForExistence(timeout: 45),

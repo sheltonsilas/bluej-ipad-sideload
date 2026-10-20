@@ -6,12 +6,17 @@ struct ClassDiagramView: View {
     var onOpenEditor: (ClassCard) -> Void
     var onCreateObject: (ClassCard) -> Void
 
-    private let nodeSize = DiagramSize(width: 176, height: 116)
-
     var body: some View {
         GeometryReader { proxy in
             let canvas = DiagramSize(width: proxy.size.width, height: proxy.size.height)
-            let frames = ClassDiagramLayout.layout(cards: workspace.classes, canvas: canvas, node: nodeSize)
+            let node = nodeSize(for: canvas)
+            let frames = ClassDiagramLayout.layout(
+                cards: workspace.classes,
+                canvas: canvas,
+                node: node,
+                margin: 12,
+                gap: 10
+            )
             ZStack(alignment: .topLeading) {
                 Theme.canvas
 
@@ -79,6 +84,13 @@ struct ClassDiagramView: View {
             }
         }
         .accessibilityIdentifier("classDiagram")
+    }
+
+    /// Size class boxes so three fit across an iPad in portrait, which is the common case.
+    private func nodeSize(for canvas: DiagramSize) -> DiagramSize {
+        let columns = max(1, min(3, workspace.classes.count))
+        let available = max(120, canvas.width - 24 - Double(columns - 1) * 10)
+        return DiagramSize(width: min(190, available / Double(columns)), height: 104)
     }
 
     private var emptyState: some View {
@@ -199,7 +211,6 @@ struct ClassBoxView: View {
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 10))
-        .accessibilityLabel("\(card.kind) \(card.simpleName)")
         .accessibilityIdentifier("class-\(card.name)")
     }
 }
