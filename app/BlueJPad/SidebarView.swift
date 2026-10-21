@@ -19,6 +19,7 @@ struct SidebarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                classesSection
                 benchSection
                 if let object = inspected {
                     InspectorView(object: object) { inspected = nil }
@@ -35,6 +36,68 @@ struct SidebarView: View {
             }
             .padding(14)
         }
+    }
+
+    private var classesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Classes")
+                    .font(.headline)
+                Spacer()
+                Text("\(workspace.classes.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if workspace.classes.isEmpty {
+                Text("Compile the project to list its classes here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(workspace.classes) { card in
+                    Button {
+                        workspace.selectedClass = card.name
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: card.error
+                                  ? "exclamationmark.triangle.fill"
+                                  : (card.compiled ? "square.fill" : "square.dashed"))
+                                .font(.caption2)
+                                .foregroundStyle(card.error
+                                                 ? Theme.error
+                                                 : (card.compiled ? Theme.accent : Color.secondary))
+                            Text(card.simpleName)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Spacer()
+                            if workspace.selectedClass == card.name {
+                                Image(systemName: "checkmark")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Theme.accent)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("classRow-\(card.name)")
+                    .contextMenu {
+                        Button {
+                            onOpenEditor(card)
+                        } label: {
+                            Label("Open Editor", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            onCreateObject(card)
+                        } label: {
+                            Label("Create Object", systemImage: "plus.circle")
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("classList")
     }
 
     private var benchSection: some View {
@@ -70,6 +133,7 @@ struct SidebarView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("benchPanel")
     }
 

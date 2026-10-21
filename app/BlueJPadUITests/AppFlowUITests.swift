@@ -26,8 +26,10 @@ final class AppFlowUITests: XCTestCase {
         add(attachment)
     }
 
+    /// Identifiers can legitimately match more than one element (a toolbar button inside a
+    /// sheet also shows up in its presentation host), so always resolve to the first match.
     private func element(_ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier]
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
     func testProjectBrowserCompilesRunsAndInspects() throws {
@@ -38,34 +40,33 @@ final class AppFlowUITests: XCTestCase {
 
         welcome.tap()
         XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 20), "the project should open")
-        attach("02-project-opened")
-        print("--- element tree after opening the project ---")
-        print(app.debugDescription)
 
-        let counter = app.staticTexts["Counter"]
-        XCTAssertTrue(counter.waitForExistence(timeout: 45),
-                      "compiling on open should draw the class diagram\n\(app.debugDescription)")
+        let counterRow = element("classRow-Counter")
+        XCTAssertTrue(counterRow.waitForExistence(timeout: 45),
+                      "compiling on open should list the classes\n\(app.debugDescription)")
         attach("02-class-diagram")
 
-        // The three Welcome classes must not overlap in the diagram.
-        let calculator = app.staticTexts["Calculator"]
-        let greeter = app.staticTexts["Greeter"]
-        if calculator.exists && greeter.exists {
-            XCTAssertFalse(counter.frame.intersects(calculator.frame), "Counter overlaps Calculator")
-            XCTAssertFalse(counter.frame.intersects(greeter.frame), "Counter overlaps Greeter")
+        // The Welcome classes are drawn in the diagram and must not overlap.
+        let counterBox = element("class-Counter")
+        let calculatorBox = element("class-Calculator")
+        let greeterBox = element("class-Greeter")
+        XCTAssertTrue(counterBox.exists, "the diagram should draw Counter")
+        if calculatorBox.exists && greeterBox.exists {
+            XCTAssertFalse(counterBox.frame.intersects(calculatorBox.frame), "Counter overlaps Calculator")
+            XCTAssertFalse(counterBox.frame.intersects(greeterBox.frame), "Counter overlaps Greeter")
         }
 
-        counter.tap()
+        counterRow.tap()
         let create = element("instantiateButton")
-        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "selecting a class should offer Create Object")
         create.tap()
 
-        let benchCard = app.staticTexts["counter1"]
-        XCTAssertTrue(benchCard.waitForExistence(timeout: 20), "creating an object should put it on the bench")
+        XCTAssertTrue(element("bench-counter1").waitForExistence(timeout: 20),
+                      "creating an object should put it on the bench")
         attach("03-object-bench")
 
         element("inspect-counter1").tap()
-        XCTAssertTrue(app.staticTexts["Inspector"].waitForExistence(timeout: 10), "the inspector should open")
+        XCTAssertTrue(element("inspector").waitForExistence(timeout: 10), "the inspector should open")
         attach("04-inspector")
 
         element("methods-counter1").tap()
@@ -79,7 +80,6 @@ final class AppFlowUITests: XCTestCase {
         XCTAssertTrue(returned.waitForExistence(timeout: 20), "increment() should return 1 and log it")
         attach("05-method-called")
 
-        // A runtime exception is reported in the terminal, not as a crash.
         element("methods-counter1").tap()
         let incrementBy = app.buttons["method-incrementBy"]
         if incrementBy.waitForExistence(timeout: 5) {
@@ -88,18 +88,18 @@ final class AppFlowUITests: XCTestCase {
             XCTAssertTrue(field.waitForExistence(timeout: 10))
             field.tap()
             field.typeText("5")
-            app.buttons["callButton"].tap()
+            element("callButton").tap()
             let five = app.staticTexts.containing(
                 NSPredicate(format: "label CONTAINS %@", "returned 6")
             ).firstMatch
-            XCTAssertTrue(five.waitForExistence(timeout: 20))
+            XCTAssertTrue(five.waitForExistence(timeout: 20), "incrementBy(5) should return 6")
         }
         attach("06-terminal")
     }
 
     func testCreateAClassEditItAndCompile() throws {
         launch(openingProject: "Welcome")
-        XCTAssertTrue(app.staticTexts["Counter"].waitForExistence(timeout: 45),
+        XCTAssertTrue(element("classRow-Counter").waitForExistence(timeout: 45),
                       "the Welcome project should open and compile\n\(app.debugDescription)")
 
         element("newClassButton").tap()
@@ -111,7 +111,7 @@ final class AppFlowUITests: XCTestCase {
         element("createClassButton").tap()
 
         // Creating a class opens its editor with the standard BlueJ body.
-        let editor = app.textViews["codeEditor"]
+        let editor = element("codeEditor")
         XCTAssertTrue(editor.waitForExistence(timeout: 20), "the new class should open in the editor")
         attach("08-editor")
 

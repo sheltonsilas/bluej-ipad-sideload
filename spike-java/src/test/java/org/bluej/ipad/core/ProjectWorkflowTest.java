@@ -116,6 +116,38 @@ class ProjectWorkflowTest {
     }
 
     @Test
+    void inheritanceWorksAcrossTheHierarchy() {
+        CoreSession session = new CoreSession();
+        session.setSource("Animal.java", """
+                public class Animal {
+                    private String name;
+                    public Animal(String name) { this.name = name; }
+                    public String getName() { return name; }
+                    public String speak() { return "..."; }
+                }
+                """);
+        session.setSource("Dog.java", """
+                public class Dog extends Animal {
+                    public Dog(String name) { super(name); }
+                    @Override public String speak() { return getName() + " says woof"; }
+                    public int legs() { return 4; }
+                }
+                """);
+        CoreSession.CompileReport report = session.compile();
+        assertTrue(report.success(), () -> "diagnostics: " + report.diagnostics());
+
+        ClassInfo dog = session.classes().stream().filter(c -> c.name().equals("Dog")).findFirst().orElseThrow();
+        assertEquals("Animal", dog.superclass());
+
+        BenchObject rex = session.create("Dog", List.of(new Value.StringValue("Rex")));
+        assertEquals(new Value.StringValue("Rex"), rex.fields().get("name"),
+                "inherited fields exist on the instance");
+        assertEquals(new Value.StringValue("Rex says woof"), session.invoke(rex.handle(), "speak", List.of()));
+        assertEquals(new Value.StringValue("Rex"), session.invoke(rex.handle(), "getName", List.of()));
+        assertEquals(new Value.IntValue(4), session.invoke(rex.handle(), "legs", List.of()));
+    }
+
+    @Test
     void unsupportedBytecodeStaysExplicit() {
         CoreSession session = new CoreSession();
         session.setSource("Wide.java", """

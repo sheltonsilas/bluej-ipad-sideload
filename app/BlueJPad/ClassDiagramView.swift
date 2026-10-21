@@ -48,7 +48,6 @@ struct ClassDiagramView: View {
                     if let frame = frames[card.name] {
                         ClassBoxView(card: card, isSelected: workspace.selectedClass == card.name)
                             .frame(width: frame.size.width, height: frame.size.height)
-                            .position(x: frame.center.x, y: frame.center.y)
                             .onTapGesture(count: 2) { onOpenEditor(card) }
                             .onTapGesture { workspace.selectedClass = card.name }
                             .contextMenu {
@@ -70,6 +69,7 @@ struct ClassDiagramView: View {
                                     Label("Compile Project", systemImage: "hammer")
                                 }
                             }
+                            .position(x: frame.center.x, y: frame.center.y)
                     }
                 }
 
@@ -83,6 +83,7 @@ struct ClassDiagramView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("classDiagram")
     }
 
@@ -211,6 +212,7 @@ struct ClassBoxView: View {
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("class-\(card.name)")
     }
 }

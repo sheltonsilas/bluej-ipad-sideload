@@ -149,12 +149,29 @@ public final class Interpreter {
 
     private InterpretedObject instantiate(ClassNode type) {
         InterpretedObject object = new InterpretedObject(type.name.replace('/', '.'));
-        for (var field : type.fields) {
-            if ((field.access & Opcodes.ACC_STATIC) == 0) {
-                object.setField(field.name, defaultValue(Type.getType(field.desc)));
+        // Superclass fields exist on the instance too, and must be prepared before the
+        // subclass constructor runs.
+        List<ClassNode> chain = hierarchy(type);
+        java.util.Collections.reverse(chain);
+        for (ClassNode node : chain) {
+            for (var field : node.fields) {
+                if ((field.access & Opcodes.ACC_STATIC) == 0) {
+                    object.setField(field.name, defaultValue(Type.getType(field.desc)));
+                }
             }
         }
         return object;
+    }
+
+    /** This class followed by its superclasses, nearest first. */
+    private List<ClassNode> hierarchy(ClassNode type) {
+        List<ClassNode> chain = new ArrayList<>();
+        ClassNode current = type;
+        for (int guard = 0; guard < 32 && current != null; guard++) {
+            chain.add(current);
+            current = current.superName == null ? null : classes.get(current.superName.replace('/', '.'));
+        }
+        return chain;
     }
 
     private void ensureInitialized(ClassNode type) {
@@ -162,6 +179,11 @@ public final class Interpreter {
         if (initialized.contains(name) || initializing.contains(name)) return;
         initializing.add(name);
         try {
+            // The JVM initialises a superclass before its subclass.
+            if (type.superName != null) {
+                ClassNode parent = classes.get(type.superName.replace('/', '.'));
+                if (parent != null) ensureInitialized(parent);
+            }
             // Class preparation: every static field starts at its type's default value.
             for (var field : type.fields) {
                 if ((field.access & Opcodes.ACC_STATIC) != 0) {
@@ -440,9 +462,30 @@ public final class Interpreter {
         }
         ClassNode type = requireClass(owner);
         ensureInitialized(type);
-        MethodNode method = findMethodByDescriptor(type, call.name, call.desc);
         InterpretedObject target = receiver == null ? null : requireObject(receiver, call.name);
-        return invokeMethod(target, type, method, arguments);
+        // Virtual dispatch: start at the receiver's runtime class so overrides win, then walk
+        // up to whichever class actually declares the method. invokespecial (super calls and
+        // private methods) must stay bound to the owner, not dispatch again.
+        boolean virtual = call.getOpcode() == Opcodes.INVOKEVIRTUAL
+                || call.getOpcode() == Opcodes.INVOKEINTERFACE;
+        ClassNode start = !virtual || target == null
+                ? type
+                : classes.getOrDefault(target.className(), type);
+        ResolvedMethod resolved = resolve(start, call.name, call.desc);
+        return invokeMethod(target, resolved.owner(), resolved.method(), arguments);
+    }
+
+    private record ResolvedMethod(ClassNode owner, MethodNode method) {}
+
+    private ResolvedMethod resolve(ClassNode start, String name, String descriptor) {
+        for (ClassNode node : hierarchy(start)) {
+            for (MethodNode method : node.methods) {
+                if (method.name.equals(name) && method.desc.equals(descriptor)) {
+                    return new ResolvedMethod(node, method);
+                }
+            }
+        }
+        throw new IllegalArgumentException("method not found: " + start.name + "." + name + descriptor);
     }
 
     // ---------------------------------------------------------------- intrinsics
@@ -720,20 +763,24 @@ public final class Interpreter {
         return result;
     }
 
-    private static MethodNode findCompatibleMethod(ClassNode type, String name, Value[] args) {
-        MethodNode fallback = null;
-        for (MethodNode method : type.methods) {
-            if (!method.name.equals(name)) continue;
-            Type[] parameters = Type.getArgumentTypes(method.desc);
-            if (parameters.length != args.length) continue;
-            boolean compatible = true;
-            for (int i = 0; i < args.length; i++) {
-                if (!isCompatible(parameters[i], args[i])) { compatible = false; break; }
+    private MethodNode findCompatibleMethod(ClassNode type, String name, Value[] args) {
+        // Constructors belong to the class itself; other methods are inherited.
+        List<ClassNode> candidates = name.equals("<init>") ? List.of(type) : hierarchy(type);
+        for (ClassNode candidate : candidates) {
+            MethodNode fallback = null;
+            for (MethodNode method : candidate.methods) {
+                if (!method.name.equals(name)) continue;
+                Type[] parameters = Type.getArgumentTypes(method.desc);
+                if (parameters.length != args.length) continue;
+                boolean compatible = true;
+                for (int i = 0; i < args.length; i++) {
+                    if (!isCompatible(parameters[i], args[i])) { compatible = false; break; }
+                }
+                if (compatible) return method;
+                if (fallback == null) fallback = method;
             }
-            if (compatible) return method;
-            if (fallback == null) fallback = method;
+            if (fallback != null) return fallback;
         }
-        if (fallback != null) return fallback;
         throw new IllegalArgumentException("method not found: " + type.name + "." + name + "/" + args.length);
     }
 

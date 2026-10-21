@@ -13,17 +13,30 @@ Implementation and tests: `spike-java/src/main/java/org/bluej/ipad/core/` and
 
 | Request | Response |
 | --- | --- |
-| `{"op":"classes"}` | `{"classes":[{"name":…,"fields":[{"name","type","static"}],"methods":[{"name","parameters","returns","static"}]}]}` |
+| `{"op":"sources"}` | `{"sources":[{"path":"Counter.java","text":"…","type":"Counter"}]}` |
+| `{"op":"setSource","path":"Counter.java","text":"…"}` | `{"saved":true,"revision":4}` |
+| `{"op":"deleteSource","path":"Counter.java"}` | `{"deleted":true,"revision":5}` |
+| `{"op":"newClass","name":"Dog","kind":"class","package":""}` | `{"path":"Dog.java","text":"…","revision":6}` |
+| `{"op":"compile"}` | `{"success":true,"revision":7,"classes":[…],"diagnostics":[…],"output":{"text":"…"}}` |
+| `{"op":"reset"}` | `{"reset":true}` |
+| `{"op":"classes"}` | `{"classes":[{"name":…,"kind":"class","superclass":"Animal","path":"Dog.java","compiled":true,"error":false,"fields":[{"name","type","static"}],"methods":[{"name","parameters","returns","static"}]}]}` |
 | `{"op":"new","class":"Counter","args":[…]}` | `{"handle":1,"class":"Counter","fields":{…}}` |
 | `{"op":"invoke","handle":1,"method":"increment","args":[{"int":5}]}` | `{"value":{"int":9}}` |
 | `{"op":"invokeStatic","class":"Counter","method":"sumTo","args":[{"int":6}]}` | `{"value":{"int":30}}` |
 | `{"op":"inspect","handle":1}` | `{"handle":1,"class":"Counter","fields":{…}}` |
-| `{"op":"bench"}` | `{"bench":[{"handle","class","fields"}, …]}` |
+| `{"op":"bench"}` | `{"bench":[{"handle","name","class","fields"}, …]}` |
+| `{"op":"removeObject","handle":1}` | `{"removed":true}` |
+| `{"op":"clearBench"}` | `{"cleared":true}` |
 | `{"op":"output"}` | `{"output":"…"}` |
 | `{"op":"clearOutput"}` | `{"cleared":true}` |
 
-Handles are session-scoped, start at 1 and are never reused. Fields are a snapshot taken at
-the moment of the call; `inspect`/`bench` re-read them after later mutations.
+Compile diagnostics are `{"path","line","column","message","severity":"error"|"warning"|"note"}`.
+A failed compile keeps the last good class files, marks the classes whose sources failed with
+`error:true, compiled:false`, and reports every message. A successful compile clears the bench.
+
+Handles are session-scoped, start at 1 and are never reused. `name` is the BlueJ-style
+instance name (`counter1`). Fields are a snapshot taken at the moment of the call;
+`inspect`/`bench` re-read them after later mutations.
 
 ## Values
 
