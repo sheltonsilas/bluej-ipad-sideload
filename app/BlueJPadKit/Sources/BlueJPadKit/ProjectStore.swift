@@ -268,6 +268,16 @@ public enum StarterProject {
      */
     public class Calculator
     {
+        public static void main(String[] args)
+        {
+            int total = 0;
+            for (int i = 1; i <= 3; i++)
+            {
+                total = add(total, i);
+            }
+            System.out.println("total " + total);
+        }
+
         public static int add(int a, int b)
         {
             return a + b;

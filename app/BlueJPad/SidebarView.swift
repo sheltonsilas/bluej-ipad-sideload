@@ -19,6 +19,9 @@ struct SidebarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if let snapshot = workspace.debugSnapshot, snapshot.isPaused {
+                    DebugPanelView(workspace: workspace, snapshot: snapshot)
+                }
                 classesSection
                 benchSection
                 if let object = inspected {
@@ -30,7 +33,8 @@ struct SidebarView: View {
                         onCreateObject: { onCreateObject(card) },
                         onOpenEditor: { onOpenEditor(card) },
                         onDelete: { onDelete(card) },
-                        onCallStatic: { method in onCallStatic(card, method) }
+                        onCallStatic: { method in onCallStatic(card, method) },
+                        onDebug: { Task { await workspace.debugMain(className: card.name) } }
                     )
                 }
             }
@@ -196,6 +200,7 @@ struct BenchCardView: View {
             RoundedRectangle(cornerRadius: 11)
                 .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 1)
         )
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bench-\(object.name)")
     }
 
@@ -213,6 +218,13 @@ struct ClassDetailView: View {
     let onOpenEditor: () -> Void
     let onDelete: () -> Void
     let onCallStatic: (ClassMethod) -> Void
+    let onDebug: () -> Void
+
+    /// BlueJ debugs a program by running its {@code main}.
+
+    private var hasMain: Bool {
+        card.methods.contains { $0.name == "main" && $0.isStatic && $0.parameters.count == 1 }
+    }
 
     private var staticMethods: [ClassMethod] { card.methods.filter(\.isStatic) }
     private var instanceMethods: [ClassMethod] {
@@ -253,6 +265,18 @@ struct ClassDetailView: View {
                 .accessibilityIdentifier("openEditorButton")
             }
 
+            if hasMain {
+                Button(action: onDebug) {
+                    Label("Debug main", systemImage: "ladybug")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+                .tint(Theme.accent)
+                .disabled(!card.compiled || card.error)
+                .accessibilityIdentifier("debugButton")
+            }
+
             if !staticMethods.isEmpty {
                 Text("Static methods")
                     .font(.caption.weight(.semibold))
@@ -283,6 +307,7 @@ struct ClassDetailView: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 11).fill(Theme.card))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("classDetail")
     }
 }
@@ -322,6 +347,7 @@ struct InspectorView: View {
             RoundedRectangle(cornerRadius: 11)
                 .strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1)
         )
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("inspector")
     }
 }

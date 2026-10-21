@@ -97,6 +97,36 @@ final class AppFlowUITests: XCTestCase {
         attach("06-terminal")
     }
 
+    func testDebuggingRunsMainAndStepsThroughIt() throws {
+        launch(openingProject: "Welcome")
+        XCTAssertTrue(element("classRow-Calculator").waitForExistence(timeout: 45),
+                      "the Welcome project should compile")
+
+        element("classRow-Calculator").tap()
+        let debug = element("debugButton")
+        XCTAssertTrue(debug.waitForExistence(timeout: 10),
+                      "a class with main should offer Debug main\n\(app.debugDescription)")
+        debug.tap()
+
+        XCTAssertTrue(element("debugPanel").waitForExistence(timeout: 30),
+                      "debugging should pause on the first line of main\n\(app.debugDescription)")
+        XCTAssertTrue(app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "line ")
+        ).firstMatch.exists, "the panel should show the current line")
+        attach("11-debugger-paused")
+
+        element("debug-stepOver").tap()
+        XCTAssertTrue(element("debugPanel").waitForExistence(timeout: 30),
+                      "stepping should pause again")
+
+        element("debug-continue").tap()
+        let finished = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "Debug run finished")
+        ).firstMatch
+        XCTAssertTrue(finished.waitForExistence(timeout: 30), "continuing should finish the run")
+        attach("12-debug-finished")
+    }
+
     func testCreateAClassEditItAndCompile() throws {
         launch(openingProject: "Welcome")
         XCTAssertTrue(element("classRow-Counter").waitForExistence(timeout: 45),

@@ -90,6 +90,7 @@ struct WorkspaceView: View {
             } label: {
                 Label("Projects", systemImage: "chevron.left")
             }
+            .disabled(workspace.isDebugging)
             .accessibilityIdentifier("backToProjectsButton")
         }
         ToolbarItemGroup(placement: .primaryAction) {
@@ -98,6 +99,7 @@ struct WorkspaceView: View {
             } label: {
                 Label("New Class", systemImage: "plus.square.on.square")
             }
+            .disabled(workspace.isBusy || workspace.isDebugging)
             .accessibilityIdentifier("newClassButton")
 
             Button {
@@ -112,7 +114,7 @@ struct WorkspaceView: View {
                     Text("Compile")
                 }
             }
-            .disabled(workspace.isBusy)
+            .disabled(workspace.isBusy || workspace.isDebugging)
             .accessibilityIdentifier("compileButton")
 
             Button {

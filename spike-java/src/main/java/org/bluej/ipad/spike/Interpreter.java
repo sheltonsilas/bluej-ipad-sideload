@@ -20,6 +20,8 @@ import org.objectweb.asm.tree.InvokeDynamicInsnNode;
 import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LabelNode;
 import org.objectweb.asm.tree.LdcInsnNode;
+import org.objectweb.asm.tree.LineNumberNode;
+import org.objectweb.asm.tree.LocalVariableNode;
 import org.objectweb.asm.tree.LookupSwitchInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -54,6 +56,43 @@ public final class Interpreter {
     private final InterpretedObject printStream = new InterpretedObject(PRINT_STREAM);
     private final int instructionLimit;
     private int executed;
+    private volatile DebugListener debug;
+    private final java.util.ArrayDeque<ActiveFrame> frames = new java.util.ArrayDeque<>();
+    private final Map<MethodNode, int[]> lineTables = new HashMap<>();
+
+    /** One variable visible in a paused frame. */
+    public record DebugVariable(String name, String type, Value value) {}
+
+    /** A frame as the debugger sees it when execution stops on a line. */
+    public record FrameView(int depth, String className, String methodName, int line,
+            List<DebugVariable> locals, InterpretedObject receiver) {}
+
+    /** Receives one callback per executed source line while a debugger is attached. */
+    public interface DebugListener {
+        void onLine(FrameView frame);
+    }
+
+    private static final class ActiveFrame {
+        final int depth;
+        final String className;
+        final String methodName;
+        final Value[] locals;
+        final InterpretedObject receiver;
+        final boolean isStatic;
+        MethodNode method;
+        int pc;
+        int line = -1;
+
+        ActiveFrame(int depth, String className, String methodName, Value[] locals,
+                InterpretedObject receiver, boolean isStatic) {
+            this.depth = depth;
+            this.className = className;
+            this.methodName = methodName;
+            this.locals = locals;
+            this.receiver = receiver;
+            this.isStatic = isStatic;
+        }
+    }
 
     public Interpreter() { this(DEFAULT_INSTRUCTION_LIMIT); }
 
@@ -91,14 +130,67 @@ public final class Interpreter {
 
     public void defineClass(String className, byte[] bytecode) {
         ClassNode node = new ClassNode();
-        new ClassReader(bytecode).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        // Debug attributes (line numbers and local variable names) are kept: the debugger
+        // needs them. Stack map frames are still skipped because the interpreter does not
+        // verify bytecode.
+        new ClassReader(bytecode).accept(node, ClassReader.SKIP_FRAMES);
         classes.put(node.name.replace('/', '.'), node);
     }
 
     public void load(Path classFile) throws IOException {
         ClassNode node = new ClassNode();
-        new ClassReader(Files.readAllBytes(classFile)).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        new ClassReader(Files.readAllBytes(classFile)).accept(node, ClassReader.SKIP_FRAMES);
         classes.put(node.name.replace('/', '.'), node);
+    }
+
+    /** Attaches a debugger; {@code null} detaches it and keeps execution at full speed. */
+    public void setDebugListener(DebugListener listener) {
+        this.debug = listener;
+    }
+
+    /** The frames of the call stack, innermost first, as the debugger sees them right now. */
+    public List<FrameView> stack() {
+        List<FrameView> views = new ArrayList<>();
+        for (ActiveFrame frame : frames) views.add(view(frame));
+        return views;
+    }
+
+    private FrameView view(ActiveFrame frame) {
+        MethodNode method = frame.method;
+        List<DebugVariable> variables = new ArrayList<>();
+        if (method != null && method.localVariables != null) {
+            for (LocalVariableNode local : method.localVariables) {
+                if (local.index >= frame.locals.length) continue;
+                int start = method.instructions.indexOf(local.start);
+                int end = method.instructions.indexOf(local.end);
+                int pc = frame.pc;
+                if (start >= 0 && pc < start) continue;
+                if (end >= 0 && pc >= end) continue;
+                Value value = frame.locals[local.index];
+                if (value == null) continue;
+                variables.add(new DebugVariable(local.name, Type.getType(local.desc).getClassName(), value));
+            }
+        } else {
+            for (int i = 0; i < frame.locals.length; i++) {
+                if (frame.locals[i] == null) continue;
+                variables.add(new DebugVariable("slot" + i, "unknown", frame.locals[i]));
+            }
+        }
+        return new FrameView(frame.depth, frame.className, frame.methodName, frame.line,
+                List.copyOf(variables), frame.receiver);
+    }
+
+    private int[] lineTable(MethodNode method) {
+        return lineTables.computeIfAbsent(method, m -> {
+            AbstractInsnNode[] instructions = m.instructions.toArray();
+            int[] lines = new int[instructions.length];
+            int current = -1;
+            for (int i = 0; i < instructions.length; i++) {
+                if (instructions[i] instanceof LineNumberNode number) current = number.line;
+                lines[i] = current;
+            }
+            return lines;
+        });
     }
 
     public List<String> loadedClasses() { return List.copyOf(classes.keySet()); }
@@ -225,13 +317,27 @@ public final class Interpreter {
             if (instructions[i] instanceof LabelNode label) labels.put(label, i);
         }
 
+        ActiveFrame frame = new ActiveFrame(frames.size(), owner.name.replace('/', '.'), method.name,
+                locals, receiver, (method.access & Opcodes.ACC_STATIC) != 0);
+        frame.method = method;
+        frames.push(frame);
         int pc = 0;
+        try {
         while (pc < instructions.length) {
             AbstractInsnNode insn = instructions[pc];
             int op = insn.getOpcode();
             if (op < 0) { pc++; continue; }
+            frame.pc = pc;
             if (++executed > instructionLimit) {
                 throw new IllegalStateException("interpreter instruction limit exceeded (" + instructionLimit + ")");
+            }
+            DebugListener listener = debug;
+            if (listener != null) {
+                int line = lineTable(method)[pc];
+                if (line > 0 && line != frame.line) {
+                    frame.line = line;
+                    listener.onLine(view(frame));
+                }
             }
             try {
                 switch (op) {
@@ -423,6 +529,9 @@ public final class Interpreter {
                 continue;
             }
             pc++;
+        }
+        } finally {
+            frames.pop();
         }
         return Value.NullValue.INSTANCE;
     }

@@ -119,6 +119,41 @@ public struct CoreAPI: Sendable {
         _ = try await call(.obj(JSONMember("op", .string("clearBench"))))
     }
 
+    // MARK: - Debugger
+
+    /// Enables the given {@code binary.Class#line} breakpoints and returns the active set.
+    @discardableResult
+    public func setBreakpoints(_ points: [String]) async throws -> [String] {
+        let response = try await call(.obj(
+            JSONMember("op", .string("debugBreakpoints")),
+            JSONMember("points", .array(points.map(JSONValue.string)))
+        ))
+        return (response["points"]?.arrayValue ?? []).compactMap(\.stringValue)
+    }
+
+    public func debugStart(className: String, method: String = "main",
+                           arguments: [CoreValue] = []) async throws -> DebugSnapshot {
+        let response = try await call(.obj(
+            JSONMember("op", .string("debugStart")),
+            JSONMember("class", .string(className)),
+            JSONMember("method", .string(method)),
+            JSONMember("args", .array(arguments.map(\.jsonArgument)))
+        ))
+        return DebugSnapshot(json: response)
+    }
+
+    public func debugCommand(_ action: DebugAction) async throws -> DebugSnapshot {
+        let response = try await call(.obj(
+            JSONMember("op", .string("debugCommand")),
+            JSONMember("action", .string(action.rawValue))
+        ))
+        return DebugSnapshot(json: response)
+    }
+
+    public func debugState() async throws -> DebugSnapshot {
+        DebugSnapshot(json: try await call(.obj(JSONMember("op", .string("debugState")))))
+    }
+
     // MARK: - Console and lifecycle
 
     public func output() async throws -> String {

@@ -34,6 +34,7 @@ public final class CoreSession {
     private record BenchEntry(int handle, String name, InterpretedObject object) {}
 
     private final Interpreter interpreter;
+    private final DebugSession debug;
     private final ProjectCompiler compiler = new ProjectCompiler();
     private final Map<String, String> sources = new LinkedHashMap<>();
     private final Map<String, byte[]> bytecode = new LinkedHashMap<>();
@@ -48,6 +49,47 @@ public final class CoreSession {
 
     public CoreSession(Interpreter interpreter) {
         this.interpreter = interpreter;
+        this.debug = new DebugSession(interpreter);
+    }
+
+    // ---------------------------------------------------------------- debugger
+
+    /**
+     * Runs a static method (usually {@code main}) under the debugger. Blocks until the program
+     * pauses at a breakpoint or step, or finishes.
+     */
+    public synchronized DebugSession.Snapshot debugStart(String className, String method,
+            List<Value> arguments) {
+        if (debug.active()) throw new IllegalStateException("a debug session is already running");
+        requireRunnable(className);
+        return debug.start(className, method, arguments);
+    }
+
+    /** Resumes a paused program and blocks until it pauses again or finishes. */
+    public synchronized DebugSession.Snapshot debugCommand(String action) {
+        return debug.command(action);
+    }
+
+    public DebugSession.Snapshot debugSnapshot() {
+        return debug.snapshot();
+    }
+
+    public void setBreakpoints(List<String> points) {
+        debug.setBreakpoints(points);
+    }
+
+    public List<String> breakpoints() {
+        return debug.breakpoints();
+    }
+
+    public boolean debugging() {
+        return debug.active();
+    }
+
+    private void requireNoDebugSession() {
+        if (debug.active()) {
+            throw new IllegalStateException("stop the debugger before changing or running the program");
+        }
     }
 
     // ---------------------------------------------------------------- sources
@@ -102,6 +144,7 @@ public final class CoreSession {
 
     /** Compiles every source, keeps the last good classes on failure and reports each class. */
     public synchronized CompileReport compile() {
+        requireNoDebugSession();
         ProjectCompiler.Result result = compiler.compile(new LinkedHashMap<>(sources));
         diagnostics = result.diagnostics();
         if (result.success()) {
@@ -209,6 +252,7 @@ public final class CoreSession {
 
     /** Constructs an object and puts it on the bench under a BlueJ-style instance name. */
     public synchronized BenchObject create(String className, List<Value> arguments) {
+        requireNoDebugSession();
         ClassInfo info = requireRunnable(className);
         InterpretedObject object = interpreter.newObject(className, arguments.toArray(Value[]::new));
         int handle = nextHandle++;
@@ -230,12 +274,14 @@ public final class CoreSession {
     }
 
     public synchronized Value invoke(int handle, String method, List<Value> arguments) {
+        requireNoDebugSession();
         BenchEntry entry = bench.get(handle);
         if (entry == null) throw new IllegalArgumentException("no bench object with handle " + handle);
         return interpreter.invoke(entry.object(), method, arguments.toArray(Value[]::new));
     }
 
     public synchronized Value invokeStatic(String className, String method, List<Value> arguments) {
+        requireNoDebugSession();
         requireRunnable(className);
         return interpreter.invokeStatic(className, method, arguments.toArray(Value[]::new));
     }
@@ -272,6 +318,7 @@ public final class CoreSession {
     }
 
     public synchronized void reset() {
+        requireNoDebugSession();
         sources.clear();
         bytecode.clear();
         bench.clear();

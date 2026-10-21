@@ -49,6 +49,7 @@ struct ConsolePanel: View {
                     proxy.scrollTo("console-bottom", anchor: .bottom)
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("consoleText")
         }
         .background(Theme.panel)

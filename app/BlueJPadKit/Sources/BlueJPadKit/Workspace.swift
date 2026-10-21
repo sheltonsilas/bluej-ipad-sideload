@@ -48,6 +48,9 @@ public final class Workspace: ObservableObject {
     @Published public private(set) var status: String = "Choose a project"
     @Published public var selectedClass: String?
     @Published public var editingFile: SourceFile?
+    @Published public private(set) var debugSnapshot: DebugSnapshot?
+    @Published public private(set) var breakpoints: [String: Set<Int>] = [:]
+    @Published public private(set) var isDebugBusy = false
 
     public let store: ProjectStore
     public let api: CoreAPI
@@ -87,6 +90,7 @@ public final class Workspace: ObservableObject {
         diagnostics = []
         console = []
         selectedClass = nil
+        debugSnapshot = nil
         status = "Choose a project"
         refreshProjects()
     }
@@ -339,6 +343,84 @@ public final class Workspace: ObservableObject {
             bench = []
         } catch {
             present(error)
+        }
+    }
+
+    // MARK: - Debugger
+
+    public var isPaused: Bool { debugSnapshot?.isPaused ?? false }
+
+    /// True while a paused program holds the core, so project actions are refused clearly.
+    public var isDebugging: Bool {
+        if let debugSnapshot { return debugSnapshot.active }
+        return false
+    }
+
+    public func breakpoints(inPath path: String) -> Set<Int> { breakpoints[path] ?? [] }
+
+    public func toggleBreakpoint(path: String, line: Int) {
+        guard line > 0 else { return }
+        var lines = breakpoints[path] ?? []
+        if lines.contains(line) {
+            lines.remove(line)
+        } else {
+            lines.insert(line)
+        }
+        if lines.isEmpty { breakpoints[path] = nil } else { breakpoints[path] = lines }
+        pushBreakpoints()
+    }
+
+    /// Breakpoints as {@code binary.Class#line}, matching what the core expects.
+    public var debugPoints: [String] {
+        var points: [String] = []
+        for (path, lines) in breakpoints {
+            guard let card = classes.first(where: { $0.path == path }) else { continue }
+            for line in lines { points.append("\(card.name)#\(line)") }
+        }
+        return points.sorted()
+    }
+
+    private func pushBreakpoints() {
+        let points = debugPoints
+        Task { [api] in
+            _ = try? await api.setBreakpoints(points)
+        }
+    }
+
+    /// Runs the class's {@code main} under the debugger and stops at the first breakpoint.
+    public func debugMain(className: String) async {
+        guard !isDebugBusy else { return }
+        isDebugBusy = true
+        defer { isDebugBusy = false }
+        do {
+            _ = try await api.setBreakpoints(debugPoints)
+            let snapshot = try await api.debugStart(className: className)
+            await apply(snapshot)
+        } catch {
+            present(error)
+        }
+    }
+
+    public func debugStep(_ action: DebugAction) async {
+        guard !isDebugBusy else { return }
+        isDebugBusy = true
+        defer { isDebugBusy = false }
+        do {
+            let snapshot = try await api.debugCommand(action)
+            await apply(snapshot)
+        } catch {
+            present(error)
+        }
+    }
+
+    private func apply(_ snapshot: DebugSnapshot) async {
+        debugSnapshot = snapshot.isPaused ? snapshot : nil
+        await captureOutput()
+        append(snapshot.summary, isError: snapshot.status == .failed)
+        if snapshot.isPaused, let frame = snapshot.topFrame {
+            status = "Paused at \(frame.location)"
+        } else if snapshot.status != .paused {
+            status = snapshot.summary
         }
     }
 

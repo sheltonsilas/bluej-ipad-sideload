@@ -85,9 +85,66 @@ public final class CoreProtocol {
             case "clearBench" -> { session.clearBench(); yield Map.of("cleared", true); }
             case "output" -> Map.of("output", session.output());
             case "clearOutput" -> { session.clearOutput(); yield Map.of("cleared", true); }
+            case "debugBreakpoints" -> debugBreakpoints(request);
+            case "debugStart" -> encodeSnapshot(session.debugStart(string(request.get("class")),
+                    request.get("method") == null ? "main" : string(request.get("method")),
+                    arguments(request)));
+            case "debugCommand" -> encodeSnapshot(session.debugCommand(string(request.get("action"))));
+            case "debugState" -> encodeSnapshot(session.debugSnapshot());
             case "reset" -> { session.reset(); yield Map.of("reset", true); }
             default -> throw new IllegalArgumentException("unknown op: " + op);
         };
+    }
+
+    private Map<String, Object> debugBreakpoints(Map<?, ?> request) {
+        Object raw = request.get("points");
+        List<String> points = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object element : list) {
+                if (element == null) continue;
+                if (element instanceof String text) points.add(text);
+                else if (element instanceof Map<?, ?> point) {
+                    points.add(string(point.get("class")) + "#" + integer(point.get("line")));
+                }
+            }
+        }
+        session.setBreakpoints(points);
+        return Map.of("points", session.breakpoints());
+    }
+
+    private static Map<String, Object> encodeSnapshot(DebugSession.Snapshot snapshot) {
+        List<Object> frames = new ArrayList<>();
+        for (DebugSession.Frame frame : snapshot.frames()) {
+            frames.add(Map.of(
+                    "class", frame.className(),
+                    "method", frame.method(),
+                    "line", frame.line(),
+                    "locals", encodeVariables(frame.locals()),
+                    "fields", encodeVariables(frame.fields())));
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("status", snapshot.status());
+        response.put("frames", frames);
+        response.put("active", snapshot.active());
+        response.put("output", snapshot.output());
+        if (snapshot.value() != null) response.put("value", encode(snapshot.value()));
+        if (snapshot.errorClass() != null) {
+            response.put("error", Map.of("class", snapshot.errorClass(),
+                    "message", snapshot.errorMessage() == null ? "" : snapshot.errorMessage()));
+        }
+        return response;
+    }
+
+    private static List<Object> encodeVariables(List<DebugSession.Variable> variables) {
+        List<Object> encoded = new ArrayList<>();
+        for (DebugSession.Variable variable : variables) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", variable.name());
+            entry.put("type", variable.type());
+            entry.put("value", encode(variable.value()));
+            encoded.add(entry);
+        }
+        return encoded;
     }
 
     private Map<String, Object> compile() {

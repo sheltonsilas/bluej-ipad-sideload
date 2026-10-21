@@ -137,6 +137,7 @@ struct ProjectBrowserView: View {
                 }
             }
             .padding(.vertical, 2)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("coreStatus")
         } header: {
             Text("Runtime")
