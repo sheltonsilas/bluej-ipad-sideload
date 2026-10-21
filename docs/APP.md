@@ -94,6 +94,15 @@ The UI tests open the Welcome project, compile it, create a `Counter`, inspect i
 `increment()` and `incrementBy(5)`, debug `Calculator.main` through a pause, a step and a finish,
 create a `Dog` class, edit it and save — with a screenshot attached at each step.
 
+## Screenshots from the CI run
+
+Captured by the simulator UI tests against the real core, so they show the app as it is
+built, not a mock-up.
+
+| Project browser | Object bench and inspector | Paused in the debugger |
+| --- | --- | --- |
+| ![Project browser](evidence/project-browser.png) | ![Object bench](evidence/object-bench.png) | ![Debugger](evidence/debugger-paused.png) |
+
 ## Debugging
 
 `DebugSession` in the core keeps the interpreter's own thread parked on a breakpoint, so the

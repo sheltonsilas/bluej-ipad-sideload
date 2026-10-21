@@ -22,11 +22,8 @@ struct SidebarView: View {
                 if let snapshot = workspace.debugSnapshot, snapshot.isPaused {
                     DebugPanelView(workspace: workspace, snapshot: snapshot)
                 }
-                classesSection
-                benchSection
-                if let object = inspected {
-                    InspectorView(object: object) { inspected = nil }
-                }
+                // The selected class's actions come first: they are what the student reached
+                // for when they tapped the class, and the bench can grow below them.
                 if let card = selectedCard {
                     ClassDetailView(
                         card: card,
@@ -37,6 +34,11 @@ struct SidebarView: View {
                         onDebug: { Task { await workspace.debugMain(className: card.name) } }
                     )
                 }
+                if let object = inspected {
+                    InspectorView(object: object) { inspected = nil }
+                }
+                classesSection
+                benchSection
             }
             .padding(14)
         }
