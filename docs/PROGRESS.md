@@ -1,6 +1,6 @@
 # Progress — BlueJ for iPad feasibility work
 
-Updated 2026-10-19. Repo: <https://github.com/sheltonsilas/bluej-ipad-sideload> (public, unofficial).
+Updated 2026-10-21. Repo: <https://github.com/sheltonsilas/bluej-ipad-sideload> (public, unofficial).
 Latest release: [`v0.2.0-phase1`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.2.0-phase1);
 first proof: [`v0.1.0-phase0`](https://github.com/sheltonsilas/bluej-ipad-sideload/releases/tag/v0.1.0-phase0).
 
@@ -73,8 +73,25 @@ snapshots, console capture) and a JSON protocol for the native bridge, documente
 ([docs/evidence/core-session-protocol.md](evidence/core-session-protocol.md)). The iOS shell
 runs three protocol calls in its own self-test (18 checks total).
 
-Next: the SwiftUI shell skeleton against a recorded-protocol stub, then the interpreter debug
-hook, then replacing ECJ for product compilation.
+The SwiftUI application now exists and is exercised end to end in CI: the iPad simulator opens
+the Welcome project, compiles it, draws the class diagram, creates and inspects objects, calls
+methods with parameters, and edits a new class — against the real core over loopback HTTP.
+
+## Phase 2: the app, including a debugger
+
+- **Compiler and runtime**: `javac` compiles in memory on the core; the interpreter runs the
+  compiled classes. A failed compile keeps the last good classes and marks the broken card.
+- **Debugger** (2026-10-21): the interpreter keeps line numbers and local-variable names and
+  reports each executed line, so `DebugSession` can park the interpreter thread on a breakpoint
+  and answer with the frame, locals, fields and caller stack. Continue, step in/over/out and stop
+  work on `main`; stepping lands on source lines. Evidence: `DebugSessionTest` (7 cases) and the
+  simulator flow test that pauses, steps and finishes `Calculator.main`.
+- **Accessibility**: container identifiers used to overwrite their children, which made the
+  inspector, bench and detail buttons unreachable to XCUITest and VoiceOver; containers now use
+  `.accessibilityElement(children: .contain)`.
+
+Next: terminal input for `Scanner`, association arrows and manual layout on the diagram, and the
+in-process bridge that removes the host core.
 
 ## What is deliberately not claimed
 

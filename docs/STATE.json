@@ -28,14 +28,15 @@
   },
   "phase1_progress": {
     "interpreter_subset": "done (first slice) — branches, loops, switch, recursion, static/instance fields, static init, int/object arrays, string concat, String/Character/Math/Integer/Double intrinsics, System.out capture, doubles, try/catch for user and runtime exceptions, instruction budget; 13 local tests plus a 15-check iOS-shell self-test",
-    "core_protocol": "done — org.bluej.ipad.core CoreSession + CoreProtocol (JSON) with 10 headless tests and 3 protocol calls in the iOS-shell self-test; documented in docs/CORE_PROTOCOL.md",
-    "still_missing": ["long", "float", "threads", "synchronization", "interfaces/default methods", "most of the JDK library", "debug hook", "SwiftUI shell", "C entry point for the bridge"]
+    "core_protocol": "done — org.bluej.ipad.core CoreSession + CoreProtocol (JSON) with 47 headless tests, including the debugger, and 3 protocol calls in the iOS-shell self-test; documented in docs/CORE_PROTOCOL.md",
+    "debugger": "done (first slice) — breakpoints per class#line, continue/step in/over/out/stop, current frame with locals and fields, caller stack, first-line stop when no breakpoint is set; 7 DebugSession tests plus a simulator flow test; documented in docs/APP.md",
+    "swiftui_shell": "done — project browser, class diagram, editor with breakpoints, object bench, inspector, terminal, debugger panel; driven by XCUITest against the real core",
+    "still_missing": ["long", "float", "threads", "synchronization", "interfaces/default methods", "most of the JDK library", "Scanner/stdin", "conditional breakpoints", "C entry point for the bridge"]
   },
   "open_tasks": [
-    "Build the SwiftUI shell skeleton in CI against the tested core protocol (stub bridge first)",
-    "Define the Java-core <-> Swift-UI interface and a headless harness for it",
+    "Add terminal input (Scanner/stdin) to the protocol and the terminal panel",
+    "Draw association arrows and allow manual class layout on the diagram",
     "Replace the EPL-2.0 ECJ test dependency with a GPL-compatible in-process compiler before product use",
-    "Implement the interpreter debug hook (breakpoints/step/variables) with tests",
     "Request permission for the BlueJ name/logo or rename the port"
   ],
   "host": {
@@ -55,6 +56,6 @@
       "monitor_dir": "%TEMP%/bluej-ipad-monitor"
     }
   },
-  "last_heartbeat_utc": "2026-10-19T05:40:00Z",
+  "last_heartbeat_utc": "2026-10-21T10:05:00Z",
   "notes": "Phase 0 closed with CI evidence. No signed IPA exists and no BlueJ feature parity is claimed."
 }

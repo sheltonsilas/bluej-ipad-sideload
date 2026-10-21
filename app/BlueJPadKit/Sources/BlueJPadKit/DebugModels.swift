@@ -85,7 +85,7 @@ public struct DebugSnapshot: Sendable {
             guard let frame = topFrame else { return "Paused." }
             return "Paused at \(frame.location)."
         case .finished:
-            if let value { return "Debug run finished: \(value.resultText)." }
+            if let value, value != .null { return "Debug run finished: \(value.resultText)." }
             return "Debug run finished."
         case .terminated:
             return "Debug run stopped."

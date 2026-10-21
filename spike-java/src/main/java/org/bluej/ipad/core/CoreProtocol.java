@@ -86,14 +86,20 @@ public final class CoreProtocol {
             case "output" -> Map.of("output", session.output());
             case "clearOutput" -> { session.clearOutput(); yield Map.of("cleared", true); }
             case "debugBreakpoints" -> debugBreakpoints(request);
-            case "debugStart" -> encodeSnapshot(session.debugStart(string(request.get("class")),
-                    request.get("method") == null ? "main" : string(request.get("method")),
-                    arguments(request)));
+            case "debugStart" -> debugStart(request);
             case "debugCommand" -> encodeSnapshot(session.debugCommand(string(request.get("action"))));
             case "debugState" -> encodeSnapshot(session.debugSnapshot());
             case "reset" -> { session.reset(); yield Map.of("reset", true); }
             default -> throw new IllegalArgumentException("unknown op: " + op);
         };
+    }
+
+    private Map<String, Object> debugStart(Map<?, ?> request) {
+        String method = request.get("method") == null ? "main" : string(request.get("method"));
+        List<Value> args = arguments(request);
+        // A caller that only says "debug main" does not have to build the String[] argument.
+        if (args.isEmpty() && method.equals("main")) args = List.of(Value.NullValue.INSTANCE);
+        return encodeSnapshot(session.debugStart(string(request.get("class")), method, args));
     }
 
     private Map<String, Object> debugBreakpoints(Map<?, ?> request) {

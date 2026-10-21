@@ -37,6 +37,12 @@ for an in-process bridge that returns the same JSON, and no UI or model code cha
   way (`counter1`, `counter2`), calls instance methods with a parameter dialog, and removes
   them. Static methods are callable from the selected class.
 - **Inspector** shows instance fields in declaration order, with expandable objects and arrays.
+- **Debugger** runs a class's `main` under a real debugger: set breakpoints (select a line in the
+  editor and choose *Toggle Breakpoint*, or tap a chip to remove one), then press **Debug main**
+  on the class detail card. The program pauses at the first breakpoint, or at the first line of
+  `main` when there is none, and the sidebar shows the current frame, its locals and fields, and
+  the caller stack. Continue, Step Over, Step Into, Step Out and Stop act on the paused program;
+  compiling and editing are disabled while it is paused.
 - **Terminal** shows `System.out` output, method return values, and runtime exceptions with
   their Java class (`java.lang.ArithmeticException: / by zero`). Unsupported bytecode is
   reported as "not supported on iPad yet" rather than as a student error.
@@ -85,13 +91,27 @@ xcodebuild test -project app/BlueJPad.xcodeproj -scheme BlueJPad \
 ```
 
 The UI tests open the Welcome project, compile it, create a `Counter`, inspect it, call
-`increment()` and `incrementBy(5)`, create a `Dog` class, edit it and save — with a screenshot
-attached at each step.
+`increment()` and `incrementBy(5)`, debug `Calculator.main` through a pause, a step and a finish,
+create a `Dog` class, edit it and save — with a screenshot attached at each step.
+
+## Debugging
+
+`DebugSession` in the core keeps the interpreter's own thread parked on a breakpoint, so the
+paused program needs no continuations: the thread simply stays where it is, and the next command
+wakes it. Breakpoints are keyed `binary.ClassName#line`; the interpreter reports one callback per
+executed source line, which is also what makes stepping land on lines rather than instructions.
+
+```
+{"op":"debugBreakpoints","points":["Calculator#7"]}
+{"op":"debugStart","class":"Calculator","method":"main"}   → {status:"paused", frames:[…]}
+{"op":"debugCommand","action":"stepOver"}                  → {status:"paused", frames:[…]}
+{"op":"debugCommand","action":"continue"}                  → {status:"finished", output:…}
+```
 
 ## Deliberate limits
 
-- No debugger (breakpoints/step). The plan is an interpreter-native hook; JDI cannot attach to
-  interpreted frames.
+- The debugger only pauses on lines and breakpoints: no conditional breakpoints, watch
+  expressions or object-bench debugging yet.
 - No JUnit integration and no `Scanner`/stdin in the terminal.
 - `long`, `float`, threads and most of the JDK are unsupported and fail explicitly.
 - The bench is session state: it is cleared on compile and when the project is reopened.

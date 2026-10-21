@@ -288,7 +288,7 @@ public final class Workspace: ObservableObject {
             bench = try await api.bench()
             connection = .ready
             await captureOutput()
-            append("\(objectName).\(method)() returned \(value.resultText).", isError: false)
+            append(resultLine(objectName, method, value), isError: false)
             return value
         } catch {
             present(error, whileRunning: "\(objectName).\(method)()")
@@ -305,12 +305,20 @@ public final class Workspace: ObservableObject {
             let value = try await api.invokeStatic(className: className, method: method, arguments: arguments)
             connection = .ready
             await captureOutput()
-            append("\(CoreValue.simpleName(className)).\(method)() returned \(value.resultText).", isError: false)
+            append(resultLine(CoreValue.simpleName(className), method, value), isError: false)
             return value
         } catch {
             present(error, whileRunning: "\(CoreValue.simpleName(className)).\(method)()")
             return nil
         }
+    }
+
+    /// A void method has no value to show, so it gets "finished" rather than "returned null".
+    private func resultLine(_ owner: String, _ method: String, _ value: CoreValue) -> String {
+        if case .null = value {
+            return "\(owner).\(method)() finished."
+        }
+        return "\(owner).\(method)() returned \(value.resultText)."
     }
 
     @discardableResult
@@ -394,7 +402,8 @@ public final class Workspace: ObservableObject {
         defer { isDebugBusy = false }
         do {
             _ = try await api.setBreakpoints(debugPoints)
-            let snapshot = try await api.debugStart(className: className)
+            // main takes a String[], which the debugger starts with as null.
+            let snapshot = try await api.debugStart(className: className, arguments: [.null])
             await apply(snapshot)
         } catch {
             present(error)

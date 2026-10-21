@@ -29,6 +29,10 @@ Implementation and tests: `spike-java/src/main/java/org/bluej/ipad/core/` and
 | `{"op":"clearBench"}` | `{"cleared":true}` |
 | `{"op":"output"}` | `{"output":"…"}` |
 | `{"op":"clearOutput"}` | `{"cleared":true}` |
+| `{"op":"debugBreakpoints","points":["Calculator#7"]}` | `{"points":["Calculator#7"]}` |
+| `{"op":"debugStart","class":"Calculator","method":"main"}` | `{"status":"paused","frames":[…],"active":true,"output":"…"}` |
+| `{"op":"debugCommand","action":"stepOver"}` | same shape, `action` is `continue`, `stepInto`, `stepOver`, `stepOut` or `stop` |
+| `{"op":"debugState"}` | last observation without changing anything |
 
 Compile diagnostics are `{"path","line","column","message","severity":"error"|"warning"|"note"}`.
 A failed compile keeps the last good class files, marks the classes whose sources failed with
@@ -37,6 +41,26 @@ A failed compile keeps the last good class files, marks the classes whose source
 Handles are session-scoped, start at 1 and are never reused. `name` is the BlueJ-style
 instance name (`counter1`). Fields are a snapshot taken at the moment of the call;
 `inspect`/`bench` re-read them after later mutations.
+
+## Debugger
+
+A debug call blocks until the program pauses or stops, so one call is still one response.
+`debugStart` runs a static method (default `main`, started with a `null` `String[]` when no
+arguments are given) and returns when it hits a breakpoint — or the first executed line when no
+breakpoint is set. While a session is active the core refuses `compile`, `reset`, `new`,
+`invoke` and `invokeStatic`, because those would change the classes under the paused thread.
+
+```json
+{"status":"paused","active":true,"output":"","frames":[
+  {"class":"Calculator","method":"main","line":7,
+   "locals":[{"name":"total","type":"int","value":{"int":3}}],
+   "fields":[]}]}
+```
+
+`status` is `paused`, `finished`, `failed` or `terminated`. Frames are innermost first; locals
+come from the compiled `LocalVariableTable`, so a variable appears once its declaration has run.
+A `failed` snapshot also carries `{"error":{"class":"java.lang.ArithmeticException","message":"/ by zero"}}`
+and a `finished` one carries the returned `value` when the method returns something.
 
 ## Values
 

@@ -75,9 +75,9 @@ final class AppFlowUITests: XCTestCase {
         increment.tap()
 
         let returned = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "returned 1")
+            NSPredicate(format: "label CONTAINS %@", "counter1.increment() finished")
         ).firstMatch
-        XCTAssertTrue(returned.waitForExistence(timeout: 20), "increment() should return 1 and log it")
+        XCTAssertTrue(returned.waitForExistence(timeout: 20), "increment() should run and log it")
         attach("05-method-called")
 
         element("methods-counter1").tap()
@@ -89,10 +89,10 @@ final class AppFlowUITests: XCTestCase {
             field.tap()
             field.typeText("5")
             element("callButton").tap()
-            let five = app.staticTexts.containing(
-                NSPredicate(format: "label CONTAINS %@", "returned 6")
+            let six = app.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", "count = 6")
             ).firstMatch
-            XCTAssertTrue(five.waitForExistence(timeout: 20), "incrementBy(5) should return 6")
+            XCTAssertTrue(six.waitForExistence(timeout: 20), "incrementBy(5) should leave the count at 6")
         }
         attach("06-terminal")
     }
