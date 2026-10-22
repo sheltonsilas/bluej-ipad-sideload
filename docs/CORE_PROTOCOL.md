@@ -67,6 +67,8 @@ and a `finished` one carries the returned `value` when the method returns someth
 | Java value | JSON | Back as an argument |
 | --- | --- | --- |
 | `int` / `boolean` / `char` | `{"int":42}` | `{"int":42}` |
+| `long` | `{"long":9000000000}` | `{"long":9000000000}` |
+| `float` | `{"float":1.5}` | `{"float":1.5}` |
 | `double` | `{"double":2.5}` | `{"double":2.5}` |
 | `String` | `{"string":"hi"}` | `{"string":"hi"}` |
 | `null` | `{"null":true}` | `{"null":true}` or `null` |
@@ -74,7 +76,9 @@ and a `finished` one carries the returned `value` when the method returns someth
 | array | `{"array":{"component":"int","items":[…]}}` | same shape |
 | boolean argument | — | `{"bool":true}` |
 
-Strings are escaped as JSON requires. Empty arguments may be omitted or `[]`.
+Strings are escaped as JSON requires. Empty arguments may be omitted or `[]`. A `float`
+travels as a JSON number so it keeps 32-bit precision; a non-finite `float` or `double`
+becomes JSON `null` because JSON has no NaN or Infinity.
 
 ## Errors
 
@@ -84,9 +88,9 @@ Failures never cross the bridge as exceptions:
 {"error":{"class":"java.lang.ArithmeticException","message":"/ by zero","unsupported":false}}
 ```
 
-`unsupported:true` marks a construct the interpreter deliberately rejects (for example
-`long` bytecode), which the UI should present as "not supported on iPad yet" rather than as
-a student bug. `class` is `java.lang.IllegalArgumentException` for malformed requests.
+`unsupported:true` marks a construct the interpreter deliberately rejects (for example a
+`synchronized` block, which emits monitor bytecode), which the UI should present as "not
+supported on iPad yet" rather than as a student bug. `class` is `java.lang.IllegalArgumentException` for malformed requests.
 
 ## Swift integration plan
 

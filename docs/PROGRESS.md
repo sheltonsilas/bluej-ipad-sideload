@@ -58,13 +58,17 @@ GraalVM-native Java core, extended interpreter, interpreter-native debugger, and
 the EPL-2.0 ECJ dependency before any product use.
 
 The interpreter now runs the BlueJ-intro subset: branches, loops, `switch`, recursion, instance
-and static fields, static initialisers, int/object arrays, string concatenation,
-`String`/`Character`/`Math`/`Integer`/`Double` intrinsics, `System.out` capture, doubles, and
-`try`/`catch` over user and runtime exceptions, with an instruction budget that stops runaway
-loops. Evidence: 13 local tests ([docs/evidence/interpreter-conformance.md](evidence/interpreter-conformance.md))
-and a 15-check self-test of the iOS entry point ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)).
-`long`, `float`, threads, synchronization and most of the JDK are still unsupported and fail
-explicitly.
+and static fields, static initialisers, arrays of every primitive and object arrays, string
+concatenation, `String`/`Character`/`Math`/`Integer`/`Long`/`Float`/`Double` intrinsics,
+`System.out` capture, arithmetic on `int`, `long`, `float` and `double` with Java's widening
+conversions, and `try`/`catch` over user and runtime exceptions, with an instruction budget
+that stops runaway loops. Values keep their declared width through locals, fields, arrays, the
+inspector and the console, so a `long` stays 64-bit and a `float` prints as Java prints it.
+Evidence: 14 `InterpreterTest` cases
+([docs/evidence/interpreter-conformance.md](evidence/interpreter-conformance.md)) and a 15-check
+self-test of the iOS entry point ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)).
+Threads, synchronization, interfaces/default methods and most of the JDK are still unsupported
+and fail explicitly.
 
 The Java-core ↔ Swift-UI contract is now defined and tested: `org.bluej.ipad.core` exposes a
 synchronous, UI-free session (class metadata, bench handles, construction, calls, field
@@ -84,7 +88,7 @@ methods with parameters, and edits a new class — against the real core over lo
 - **Debugger** (2026-10-21): the interpreter keeps line numbers and local-variable names and
   reports each executed line, so `DebugSession` can park the interpreter thread on a breakpoint
   and answer with the frame, locals, fields and caller stack. Continue, step in/over/out and stop
-  work on `main`; stepping lands on source lines. Evidence: `DebugSessionTest` (7 cases) and the
+  work on `main`; stepping lands on source lines. Evidence: `DebugSessionTest` (8 cases) and the
   simulator flow test that pauses, steps and finishes `Calculator.main`.
 - **Accessibility**: container identifiers used to overwrite their children, which made the
   inspector, bench and detail buttons unreachable to XCUITest and VoiceOver; containers now use

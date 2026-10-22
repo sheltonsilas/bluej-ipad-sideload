@@ -122,7 +122,11 @@ executed source line, which is also what makes stepping land on lines rather tha
 - The debugger only pauses on lines and breakpoints: no conditional breakpoints, watch
   expressions or object-bench debugging yet.
 - No JUnit integration and no `Scanner`/stdin in the terminal.
-- `long`, `float`, threads and most of the JDK are unsupported and fail explicitly.
+- Threads, synchronization, interfaces/default methods and most of the JDK are unsupported and
+  fail explicitly.
+- The runtime covers `int`, `long`, `float` and `double` with Java's widening conversions,
+  including arrays of every primitive and `Math`/`Long`/`Float` helpers. Values keep their
+  declared width end to end, so `println` and the inspector format them as Java does.
 - The bench is session state: it is cleared on compile and when the project is reopened.
 - The device build needs either the in-process bridge or a reachable core; there is no
   on-device JVM.

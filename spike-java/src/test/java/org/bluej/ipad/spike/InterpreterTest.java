@@ -129,6 +129,56 @@ class InterpreterTest {
             }
             """;
 
+    private static final String WIDE_NUMBERS = """
+            public class Wide {
+                private long total;
+                private float ratio;
+                public Wide(long total, float ratio) { this.total = total; this.ratio = ratio; }
+                public long total() { return total; }
+                public void add(long amount) { total = total + amount; }
+                public float ratio() { return ratio; }
+                public static long factorial(int n) {
+                    long result = 1;
+                    for (int i = 2; i <= n; i++) { result = result * i; }
+                    return result;
+                }
+                public static float half(float value) { return value / 2; }
+                public static float scale(float value, int by) { return value * by; }
+                public static double mix(int a, long b, float c) { return a + b + c; }
+                public static long countdown(long n) {
+                    while (n > 0) { n = n - 1; }
+                    return n;
+                }
+                public static boolean isHuge(long value) { return value > 2000000000L; }
+                public static int compare(long a, long b) { return a < b ? -1 : (a == b ? 0 : 1); }
+                public static int narrow(long value) { return (int) value; }
+                public static long widen(int value) { return value; }
+                public static float toFloat(long value) { return value; }
+                public static long truncate(double value) { return (long) value; }
+                public static String describe(long big, float small) { return big + "|" + small; }
+                public static long[] range(int n) {
+                    long[] values = new long[n];
+                    for (int i = 0; i < n; i++) { values[i] = i * 1000000000L; }
+                    return values;
+                }
+                public static float[] halves(int n) {
+                    float[] values = new float[n];
+                    for (int i = 0; i < n; i++) { values[i] = i + 0.5f; }
+                    return values;
+                }
+                public static String math(long big) {
+                    return Math.abs(big) + " " + Math.round(2.6) + " " + Math.round(2.6f)
+                            + " " + Math.max(big, 2L) + " " + Long.parseLong("9000000000");
+                }
+                public static void print() {
+                    System.out.println(9000000000L);
+                    System.out.println(1.5f);
+                    System.out.println(0.5f + 0.25f);
+                }
+                public static long divide(long a, long b) { return a / b; }
+            }
+            """;
+
     private static final String OUTPUT = """
             public class Printer {
                 public static void run() {
@@ -266,14 +316,83 @@ class InterpreterTest {
     }
 
     @Test
+    void computesWithLongsAndFloats() {
+        Interpreter interpreter = compileAndLoad("Wide", WIDE_NUMBERS);
+        assertEquals(new Value.LongValue(2432902008176640000L),
+                interpreter.invokeStatic("Wide", "factorial", new Value.IntValue(20)));
+        assertEquals(new Value.FloatValue(1.25f),
+                interpreter.invokeStatic("Wide", "half", new Value.FloatValue(2.5f)));
+        assertEquals(new Value.FloatValue(7.5f),
+                interpreter.invokeStatic("Wide", "scale", new Value.FloatValue(2.5f), new Value.IntValue(3)));
+        assertEquals(new Value.DoubleValue(8.5),
+                interpreter.invokeStatic("Wide", "mix", new Value.IntValue(1),
+                        new Value.LongValue(5), new Value.FloatValue(2.5f)));
+        assertEquals(new Value.LongValue(0L),
+                interpreter.invokeStatic("Wide", "countdown", new Value.LongValue(3)));
+        assertEquals(new Value.IntValue(1),
+                interpreter.invokeStatic("Wide", "isHuge", new Value.LongValue(3_000_000_000L)));
+        assertEquals(new Value.IntValue(-1),
+                interpreter.invokeStatic("Wide", "compare", new Value.LongValue(1), new Value.LongValue(2)));
+        assertEquals(new Value.IntValue(0),
+                interpreter.invokeStatic("Wide", "compare", new Value.LongValue(4), new Value.LongValue(4)));
+        assertEquals(new Value.IntValue(42),
+                interpreter.invokeStatic("Wide", "narrow", new Value.LongValue(42)));
+        assertEquals(new Value.LongValue(42L),
+                interpreter.invokeStatic("Wide", "widen", new Value.IntValue(42)));
+        assertEquals(new Value.FloatValue(7f),
+                interpreter.invokeStatic("Wide", "toFloat", new Value.LongValue(7)));
+        assertEquals(new Value.LongValue(2L),
+                interpreter.invokeStatic("Wide", "truncate", new Value.DoubleValue(2.9)));
+        assertEquals(new Value.StringValue("5000000000|1.25"),
+                interpreter.invokeStatic("Wide", "describe",
+                        new Value.LongValue(5_000_000_000L), new Value.FloatValue(1.25f)));
+        // Math.round(double) is a long, Math.max picks the long overload, Long.parseLong keeps 64 bits.
+        assertEquals(new Value.StringValue("5 3 3 2 9000000000"),
+                interpreter.invokeStatic("Wide", "math", new Value.LongValue(-5)));
+
+        InterpretedThrowable thrown = assertThrows(InterpretedThrowable.class,
+                () -> interpreter.invokeStatic("Wide", "divide", new Value.LongValue(1), new Value.LongValue(0)));
+        assertEquals("java.lang.ArithmeticException", thrown.className());
+    }
+
+    @Test
+    void longAndFloatArraysAndFieldsKeepTheirTypes() {
+        Interpreter interpreter = compileAndLoad("Wide", WIDE_NUMBERS);
+
+        InterpretedArray longs = ((Value.ArrayValue) interpreter.invokeStatic("Wide", "range",
+                new Value.IntValue(3))).value();
+        assertEquals("long", longs.componentType());
+        assertEquals(new Value.LongValue(2_000_000_000L), longs.get(2));
+
+        InterpretedArray floats = ((Value.ArrayValue) interpreter.invokeStatic("Wide", "halves",
+                new Value.IntValue(2))).value();
+        assertEquals("float", floats.componentType());
+        assertEquals(new Value.FloatValue(0.5f), floats.get(0));
+        assertEquals(new Value.FloatValue(1.5f), floats.get(1));
+
+        var object = interpreter.newObject("Wide", new Value.LongValue(5_000_000_000L), new Value.FloatValue(0.5f));
+        assertEquals(new Value.LongValue(5_000_000_000L), object.getField("total"));
+        assertEquals(new Value.FloatValue(0.5f), object.getField("ratio"));
+        object.invoke(interpreter, "add", new Value.LongValue(1_000_000_000L));
+        assertEquals(new Value.LongValue(6_000_000_000L), object.getField("total"));
+        assertEquals(new Value.LongValue(6_000_000_000L), object.invoke(interpreter, "total"));
+    }
+
+    @Test
+    void printsLongsAndFloatsLikeJava() {
+        Interpreter interpreter = compileAndLoad("Wide", WIDE_NUMBERS);
+        interpreter.invokeStatic("Wide", "print");
+        assertEquals("9000000000\n1.5\n0.75\n", interpreter.output());
+    }
+
+    @Test
     void refusesUnsupportedBytecodeExplicitly() {
-        Interpreter interpreter = compileAndLoad("Wide", """
-                public class Wide {
-                    public static long run(long x) { return x + 1; }
+        Interpreter interpreter = compileAndLoad("Locked", """
+                public class Locked {
+                    public static int run() { synchronized ("lock") { return 1; } }
                 }
                 """);
-        assertThrows(UnsupportedOperationException.class,
-                () -> interpreter.invokeStatic("Wide", "run", new Value.IntValue(1)));
+        assertThrows(UnsupportedOperationException.class, () -> interpreter.invokeStatic("Locked", "run"));
     }
 
     private static InterpretedArray stringArray(String... values) {

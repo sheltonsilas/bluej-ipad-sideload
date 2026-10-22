@@ -83,6 +83,32 @@ class CoreServerTest {
     }
 
     @Test
+    void carriesLongsAndFloatsOverHttp() throws Exception {
+        String source = "public class Wide {\\n"
+                + "  private long total;\\n"
+                + "  public Wide(long start) { total = start; }\\n"
+                + "  public void add(long amount) { total = total + amount; }\\n"
+                + "  public long getTotal() { return total; }\\n"
+                + "  public static float half(float value) { return value / 2; }\\n"
+                + "}\\n";
+        assertEquals(true, rpc("{\"op\":\"setSource\",\"path\":\"Wide.java\",\"text\":\"" + source + "\"}")
+                .get("saved"));
+        assertEquals(true, rpc("{\"op\":\"compile\"}").get("success"));
+
+        Map<String, Object> created = rpc("{\"op\":\"new\",\"class\":\"Wide\",\"args\":[{\"long\":9000000000}]}");
+        Map<?, ?> fields = (Map<?, ?>) created.get("fields");
+        assertEquals(Map.of("long", 9_000_000_000L), fields.get("total"));
+
+        rpc("{\"op\":\"invoke\",\"handle\":1,\"method\":\"add\",\"args\":[{\"long\":1}]}");
+        assertEquals(Map.of("long", 9_000_000_001L),
+                rpc("{\"op\":\"invoke\",\"handle\":1,\"method\":\"getTotal\"}").get("value"));
+
+        assertEquals(Map.of("float", 0.75),
+                rpc("{\"op\":\"invokeStatic\",\"class\":\"Wide\",\"method\":\"half\",\"args\":[{\"float\":1.5}]}")
+                        .get("value"));
+    }
+
+    @Test
     void errorsStayInBandAndMalformedRequestsAreRejected() throws Exception {
         Map<String, Object> unknown = rpc("{\"op\":\"nonsense\"}");
         assertTrue(((Map<?, ?>) unknown.get("error")).get("message").toString().contains("unknown op"));

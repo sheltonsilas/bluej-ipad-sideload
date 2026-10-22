@@ -20,7 +20,16 @@ class CoreProtocolTest {
                     return total;
                 }
                 public static int divide(int a, int b) { return a / b; }
-                public static long unsupported(long value) { return value; }
+                public static long twice(long value) { return value * 2; }
+                public static float half(float value) { return value / 2; }
+                public static long sum(long[] values) {
+                    long total = 0;
+                    for (long value : values) { total += value; }
+                    return total;
+                }
+                public static long unsupported() {
+                    synchronized ("lock") { return 1; }
+                }
             }
             """;
 
@@ -101,13 +110,33 @@ class CoreProtocolTest {
         assertEquals(false, details.get("unsupported"));
 
         Map<String, Object> unsupported = call(protocol, """
-                {"op":"invokeStatic","class":"Counter","method":"unsupported","args":[{"int":1}]}
+                {"op":"invokeStatic","class":"Counter","method":"unsupported"}
                 """);
         Map<?, ?> unsupportedDetails = (Map<?, ?>) unsupported.get("error");
         assertEquals(true, unsupportedDetails.get("unsupported"));
 
         Map<String, Object> unknown = call(protocol, "{\"op\":\"nonsense\"}");
         assertTrue(((Map<?, ?>) unknown.get("error")).get("message").toString().contains("unknown op"));
+    }
+
+    @Test
+    void carriesLongsAndFloatsAcrossTheBridge() {
+        CoreProtocol protocol = protocol();
+        Map<String, Object> doubled = call(protocol, """
+                {"op":"invokeStatic","class":"Counter","method":"twice","args":[{"long":9000000000}]}
+                """);
+        assertEquals(Map.of("long", 18_000_000_000L), doubled.get("value"));
+
+        Map<String, Object> halved = call(protocol, """
+                {"op":"invokeStatic","class":"Counter","method":"half","args":[{"float":2.5}]}
+                """);
+        assertEquals(Map.of("float", 1.25), halved.get("value"));
+
+        Map<String, Object> array = call(protocol, """
+                {"op":"invokeStatic","class":"Counter","method":"sum",
+                 "args":[{"array":{"component":"long","items":[{"long":1},{"long":2},{"long":3000000000}]}}]}
+                """);
+        assertEquals(Map.of("long", 3_000_000_003L), array.get("value"));
     }
 
     @Test

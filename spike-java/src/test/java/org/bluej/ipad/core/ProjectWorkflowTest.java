@@ -148,16 +148,39 @@ class ProjectWorkflowTest {
     }
 
     @Test
-    void unsupportedBytecodeStaysExplicit() {
+    void longAndFloatProgramsRunThroughTheSession() {
         CoreSession session = new CoreSession();
         session.setSource("Wide.java", """
-                public class Wide { public static long twice(long value) { return value * 2; } }
+                public class Wide {
+                    private long total;
+                    public Wide(long start) { total = start; }
+                    public static long twice(long value) { return value * 2; }
+                    public static float ratio(long part, long whole) { return (float) part / whole; }
+                    public long add(long amount) { total = total + amount; return total; }
+                }
+                """);
+        assertTrue(session.compile().success());
+        assertEquals(new Value.LongValue(4_000_000_000L),
+                session.invokeStatic("Wide", "twice", List.of(new Value.LongValue(2_000_000_000L))));
+        assertEquals(new Value.FloatValue(0.25f),
+                session.invokeStatic("Wide", "ratio", List.of(new Value.LongValue(1), new Value.LongValue(4))));
+
+        BenchObject wide = session.create("Wide", List.of(new Value.LongValue(5_000_000_000L)));
+        assertEquals(new Value.LongValue(5_000_000_000L), wide.fields().get("total"));
+        assertEquals(new Value.LongValue(6_000_000_000L),
+                session.invoke(wide.handle(), "add", List.of(new Value.LongValue(1_000_000_000L))));
+    }
+
+    @Test
+    void unsupportedBytecodeStaysExplicit() {
+        CoreSession session = new CoreSession();
+        session.setSource("Locked.java", """
+                public class Locked { public static int run() { synchronized ("lock") { return 1; } } }
                 """);
         assertTrue(session.compile().success());
         UnsupportedOperationException thrown = assertThrows(UnsupportedOperationException.class,
-                () -> session.invokeStatic("Wide", "twice", List.of(new Value.IntValue(2))));
-        assertTrue(thrown.getMessage().toLowerCase().contains("long")
-                || thrown.getMessage().toLowerCase().contains("unsupported"), thrown.getMessage());
+                () -> session.invokeStatic("Locked", "run", List.of()));
+        assertTrue(thrown.getMessage().toLowerCase().contains("unsupported"), thrown.getMessage());
     }
 
     @Test

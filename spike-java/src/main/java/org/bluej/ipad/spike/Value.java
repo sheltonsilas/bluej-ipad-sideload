@@ -5,15 +5,20 @@ import java.util.Objects;
 /**
  * A value on the interpreter's operand stack, in a local variable or in a field.
  *
- * <p>Booleans, bytes, chars and shorts are represented as {@link IntValue}; there is no
- * automatic boxing yet. {@code long} and {@code float} are deliberately absent: the
- * interpreter rejects their bytecodes instead of silently computing the wrong result.
+ * <p>Booleans, bytes, chars and shorts are represented as {@link IntValue}. {@code float}
+ * and {@code double} stay distinct rather than being widened to double, because Java prints
+ * them with different precision ({@code Float.toString(1.1f)} is {@code "1.1"}, not
+ * {@code "1.100000023841858"}), and a student's console output has to match BlueJ's.
  */
 public sealed interface Value
-        permits Value.IntValue, Value.DoubleValue, Value.StringValue,
-                Value.ObjectValue, Value.ArrayValue, Value.NullValue {
+        permits Value.IntValue, Value.LongValue, Value.FloatValue, Value.DoubleValue,
+                Value.StringValue, Value.ObjectValue, Value.ArrayValue, Value.NullValue {
 
     record IntValue(int value) implements Value {}
+
+    record LongValue(long value) implements Value {}
+
+    record FloatValue(float value) implements Value {}
 
     record DoubleValue(double value) implements Value {}
 

@@ -33,12 +33,18 @@ import org.objectweb.asm.tree.VarInsnNode;
 /**
  * In-process bytecode interpreter for the subset a BlueJ introductory program uses.
  *
- * <p>Supported: integer and double arithmetic, comparisons and branches, loops, static and
- * instance fields, arrays, string constants and concatenation, a set of {@code java.lang}
- * and {@code java.io.PrintStream} intrinsics, object construction, method calls (including
+ * <p>Supported: {@code int}, {@code long}, {@code float} and {@code double} arithmetic,
+ * comparisons and branches, loops, static and instance fields, arrays of every primitive,
+ * string constants and concatenation, a set of {@code java.lang} and
+ * {@code java.io.PrintStream} intrinsics, object construction, method calls (including
  * recursion) and {@code try}/{@code catch} over the interpreter's own exception table.
  *
- * <p>Deliberately unsupported: {@code long}, {@code float}, threads, synchronization,
+ * <p>The interpreter keeps one {@link Value} per logical value, so a {@code long} or
+ * {@code double} takes a single slot on its operand stack even though the JVM gives it two.
+ * Local variable indexes still follow the JVM's two-slot numbering, because that is how the
+ * compiler emits them; the second slot of a wide local simply stays empty.
+ *
+ * <p>Deliberately unsupported: threads, synchronization,
  * {@code invokedynamic} other than string concatenation, reflection, and native methods.
  * Unsupported bytecode fails explicitly with {@link UnsupportedOperationException} rather
  * than producing a wrong answer. This is not a JVM and does not claim JVM conformance.
@@ -306,7 +312,7 @@ public final class Interpreter {
             local += 1;
         }
         for (int i = 0; i < arguments.length; i++) {
-            locals[local] = arguments[i];
+            locals[local] = coerce(parameterTypes[i], arguments[i]);
             local += parameterTypes[i].getSize(); // double/long parameters occupy two slots
         }
 
@@ -348,21 +354,34 @@ public final class Interpreter {
                          Opcodes.ICONST_4, Opcodes.ICONST_5 -> push(stack, new Value.IntValue(op - Opcodes.ICONST_0));
                     case Opcodes.BIPUSH, Opcodes.SIPUSH -> push(stack, new Value.IntValue(((IntInsnNode) insn).operand));
                     case Opcodes.LDC -> push(stack, constant(((LdcInsnNode) insn).cst));
-                    case Opcodes.ILOAD, Opcodes.FLOAD, Opcodes.ALOAD -> push(stack, locals[((VarInsnNode) insn).var]);
-                    case Opcodes.DLOAD -> push(stack, locals[((VarInsnNode) insn).var]);
-                    case Opcodes.ISTORE, Opcodes.FSTORE, Opcodes.ASTORE -> locals[((VarInsnNode) insn).var] = pop(stack);
-                    case Opcodes.DSTORE -> locals[((VarInsnNode) insn).var] = pop(stack);
+                    case Opcodes.FCONST_0, Opcodes.FCONST_1, Opcodes.FCONST_2 ->
+                            push(stack, new Value.FloatValue(op - Opcodes.FCONST_0));
+                    case Opcodes.LCONST_0, Opcodes.LCONST_1 ->
+                            push(stack, new Value.LongValue(op - Opcodes.LCONST_0));
+                    case Opcodes.DCONST_0, Opcodes.DCONST_1 ->
+                            push(stack, new Value.DoubleValue(op - Opcodes.DCONST_0));
+                    case Opcodes.ILOAD, Opcodes.LLOAD, Opcodes.FLOAD, Opcodes.DLOAD, Opcodes.ALOAD ->
+                            push(stack, locals[((VarInsnNode) insn).var]);
+                    case Opcodes.ISTORE, Opcodes.LSTORE, Opcodes.FSTORE, Opcodes.DSTORE, Opcodes.ASTORE ->
+                            locals[((VarInsnNode) insn).var] = pop(stack);
                     case Opcodes.IINC -> {
                         IincInsnNode inc = (IincInsnNode) insn;
                         locals[inc.var] = new Value.IntValue(asInt(locals[inc.var]) + inc.incr);
                     }
                     case Opcodes.POP -> pop(stack);
-                    case Opcodes.POP2 -> { pop(stack); pop(stack); }
+                    case Opcodes.POP2 -> {
+                        // Either one wide value (long/double) or two narrow ones.
+                        if (!isWide(pop(stack))) pop(stack);
+                    }
                     case Opcodes.DUP -> push(stack, peek(stack));
                     case Opcodes.DUP2 -> {
-                        Value a = pop(stack);
-                        Value b = pop(stack);
-                        push(stack, b); push(stack, a); push(stack, b); push(stack, a);
+                        Value top = pop(stack);
+                        if (isWide(top)) {
+                            push(stack, top); push(stack, top);
+                        } else {
+                            Value below = pop(stack);
+                            push(stack, below); push(stack, top); push(stack, below); push(stack, top);
+                        }
                     }
                     case Opcodes.SWAP -> {
                         Value a = pop(stack); Value b = pop(stack);
@@ -380,6 +399,30 @@ public final class Interpreter {
                     case Opcodes.IOR -> binaryInt(stack, (a, b) -> a | b);
                     case Opcodes.IXOR -> binaryInt(stack, (a, b) -> a ^ b);
                     case Opcodes.INEG -> push(stack, new Value.IntValue(-asInt(pop(stack))));
+                    case Opcodes.LADD -> binaryLong(stack, (a, b) -> a + b);
+                    case Opcodes.LSUB -> binaryLong(stack, (a, b) -> a - b);
+                    case Opcodes.LMUL -> binaryLong(stack, (a, b) -> a * b);
+                    case Opcodes.LDIV -> binaryLong(stack, Interpreter::longDivide);
+                    case Opcodes.LREM -> binaryLong(stack, Interpreter::longRemainder);
+                    case Opcodes.LAND -> binaryLong(stack, (a, b) -> a & b);
+                    case Opcodes.LOR -> binaryLong(stack, (a, b) -> a | b);
+                    case Opcodes.LXOR -> binaryLong(stack, (a, b) -> a ^ b);
+                    case Opcodes.LSHL, Opcodes.LSHR, Opcodes.LUSHR -> {
+                        int distance = asInt(pop(stack)) & 0x3f;
+                        long left = asLong(pop(stack));
+                        push(stack, new Value.LongValue(switch (op) {
+                            case Opcodes.LSHL -> left << distance;
+                            case Opcodes.LSHR -> left >> distance;
+                            default -> left >>> distance;
+                        }));
+                    }
+                    case Opcodes.LNEG -> push(stack, new Value.LongValue(-asLong(pop(stack))));
+                    case Opcodes.FADD -> binaryFloat(stack, (a, b) -> a + b);
+                    case Opcodes.FSUB -> binaryFloat(stack, (a, b) -> a - b);
+                    case Opcodes.FMUL -> binaryFloat(stack, (a, b) -> a * b);
+                    case Opcodes.FDIV -> binaryFloat(stack, (a, b) -> a / b);
+                    case Opcodes.FREM -> binaryFloat(stack, (a, b) -> a % b);
+                    case Opcodes.FNEG -> push(stack, new Value.FloatValue(-asFloat(pop(stack))));
                     case Opcodes.DADD -> binaryDouble(stack, (a, b) -> a + b);
                     case Opcodes.DSUB -> binaryDouble(stack, (a, b) -> a - b);
                     case Opcodes.DMUL -> binaryDouble(stack, (a, b) -> a * b);
@@ -391,6 +434,16 @@ public final class Interpreter {
                     case Opcodes.I2B -> push(stack, new Value.IntValue((byte) asInt(pop(stack))));
                     case Opcodes.I2C -> push(stack, new Value.IntValue((char) asInt(pop(stack))));
                     case Opcodes.I2S -> push(stack, new Value.IntValue((short) asInt(pop(stack))));
+                    case Opcodes.I2L -> push(stack, new Value.LongValue(asInt(pop(stack))));
+                    case Opcodes.I2F -> push(stack, new Value.FloatValue(asInt(pop(stack))));
+                    case Opcodes.L2I -> push(stack, new Value.IntValue((int) asLong(pop(stack))));
+                    case Opcodes.L2F -> push(stack, new Value.FloatValue((float) asLong(pop(stack))));
+                    case Opcodes.L2D -> push(stack, new Value.DoubleValue((double) asLong(pop(stack))));
+                    case Opcodes.F2I -> push(stack, new Value.IntValue((int) asFloat(pop(stack))));
+                    case Opcodes.F2L -> push(stack, new Value.LongValue((long) asFloat(pop(stack))));
+                    case Opcodes.F2D -> push(stack, new Value.DoubleValue((double) asFloat(pop(stack))));
+                    case Opcodes.D2L -> push(stack, new Value.LongValue((long) asDouble(pop(stack))));
+                    case Opcodes.D2F -> push(stack, new Value.FloatValue((float) asDouble(pop(stack))));
                     case Opcodes.DCMPL, Opcodes.DCMPG -> {
                         double b = asDouble(pop(stack));
                         double a = asDouble(pop(stack));
@@ -398,6 +451,19 @@ public final class Interpreter {
                         if (op == Opcodes.DCMPG && (Double.isNaN(a) || Double.isNaN(b))) result = 1;
                         if (op == Opcodes.DCMPL && (Double.isNaN(a) || Double.isNaN(b))) result = -1;
                         push(stack, new Value.IntValue(result));
+                    }
+                    case Opcodes.FCMPL, Opcodes.FCMPG -> {
+                        float b = asFloat(pop(stack));
+                        float a = asFloat(pop(stack));
+                        int result = a > b ? 1 : a < b ? -1 : 0;
+                        if (op == Opcodes.FCMPG && (Float.isNaN(a) || Float.isNaN(b))) result = 1;
+                        if (op == Opcodes.FCMPL && (Float.isNaN(a) || Float.isNaN(b))) result = -1;
+                        push(stack, new Value.IntValue(result));
+                    }
+                    case Opcodes.LCMP -> {
+                        long b = asLong(pop(stack));
+                        long a = asLong(pop(stack));
+                        push(stack, new Value.IntValue(Long.compare(a, b)));
                     }
                     case Opcodes.IFEQ -> { if (asInt(pop(stack)) == 0) { pc = labels.get(((JumpInsnNode) insn).label); continue; } }
                     case Opcodes.IFNE -> { if (asInt(pop(stack)) != 0) { pc = labels.get(((JumpInsnNode) insn).label); continue; } }
@@ -443,7 +509,8 @@ public final class Interpreter {
                         pc = labels.get(at < 0 ? lookup.dflt : lookup.labels.get(at));
                         continue;
                     }
-                    case Opcodes.IRETURN, Opcodes.DRETURN, Opcodes.ARETURN -> { return pop(stack); }
+                    case Opcodes.IRETURN, Opcodes.LRETURN, Opcodes.FRETURN,
+                         Opcodes.DRETURN, Opcodes.ARETURN -> { return pop(stack); }
                     case Opcodes.RETURN -> { return Value.NullValue.INSTANCE; }
                     case Opcodes.NEW -> push(stack, instantiateDynamic((TypeInsnNode) insn));
                     case Opcodes.NEWARRAY -> {
@@ -461,11 +528,12 @@ public final class Interpreter {
                         int index = asInt(pop(stack));
                         push(stack, requireArray(pop(stack)).get(index));
                     }
-                    case Opcodes.DALOAD -> {
+                    case Opcodes.LALOAD, Opcodes.DALOAD -> {
                         int index = asInt(pop(stack));
                         push(stack, requireArray(pop(stack)).get(index));
                     }
-                    case Opcodes.IASTORE, Opcodes.BASTORE, Opcodes.CASTORE, Opcodes.SASTORE, Opcodes.AASTORE, Opcodes.FASTORE, Opcodes.DASTORE -> {
+                    case Opcodes.IASTORE, Opcodes.BASTORE, Opcodes.CASTORE, Opcodes.SASTORE,
+                         Opcodes.AASTORE, Opcodes.FASTORE, Opcodes.LASTORE, Opcodes.DASTORE -> {
                         Value value = pop(stack);
                         int index = asInt(pop(stack));
                         requireArray(pop(stack)).set(index, value);
@@ -678,17 +746,29 @@ public final class Interpreter {
             }
             case "java.lang.Math" -> {
                 yield switch (name) {
-                    case "abs" -> args[0] instanceof Value.DoubleValue d
-                            ? new Value.DoubleValue(Math.abs(d.value())) : new Value.IntValue(Math.abs(asInt(args[0])));
+                    case "abs" -> switch (args[0]) {
+                        case Value.LongValue l -> new Value.LongValue(Math.abs(l.value()));
+                        case Value.FloatValue f -> new Value.FloatValue(Math.abs(f.value()));
+                        case Value.DoubleValue d -> new Value.DoubleValue(Math.abs(d.value()));
+                        default -> new Value.IntValue(Math.abs(asInt(args[0])));
+                    };
                     case "sqrt" -> new Value.DoubleValue(Math.sqrt(asDouble(args[0])));
                     case "pow" -> new Value.DoubleValue(Math.pow(asDouble(args[0]), asDouble(args[1])));
-                    case "min" -> args[0] instanceof Value.DoubleValue d
-                            ? new Value.DoubleValue(Math.min(d.value(), asDouble(args[1])))
-                            : new Value.IntValue(Math.min(asInt(args[0]), asInt(args[1])));
-                    case "max" -> args[0] instanceof Value.DoubleValue d
-                            ? new Value.DoubleValue(Math.max(d.value(), asDouble(args[1])))
-                            : new Value.IntValue(Math.max(asInt(args[0]), asInt(args[1])));
-                    case "round" -> new Value.IntValue((int) Math.round(asDouble(args[0])));
+                    case "min" -> switch (args[0]) {
+                        case Value.LongValue l -> new Value.LongValue(Math.min(l.value(), asLong(args[1])));
+                        case Value.FloatValue f -> new Value.FloatValue(Math.min(f.value(), asFloat(args[1])));
+                        case Value.DoubleValue d -> new Value.DoubleValue(Math.min(d.value(), asDouble(args[1])));
+                        default -> new Value.IntValue(Math.min(asInt(args[0]), asInt(args[1])));
+                    };
+                    case "max" -> switch (args[0]) {
+                        case Value.LongValue l -> new Value.LongValue(Math.max(l.value(), asLong(args[1])));
+                        case Value.FloatValue f -> new Value.FloatValue(Math.max(f.value(), asFloat(args[1])));
+                        case Value.DoubleValue d -> new Value.DoubleValue(Math.max(d.value(), asDouble(args[1])));
+                        default -> new Value.IntValue(Math.max(asInt(args[0]), asInt(args[1])));
+                    };
+                    case "round" -> args[0] instanceof Value.DoubleValue d
+                            ? new Value.LongValue(Math.round(d.value()))
+                            : new Value.IntValue(Math.round(asFloat(args[0])));
                     case "random" -> new Value.DoubleValue(Math.random());
                     default -> NO_INTRINSIC;
                 };
@@ -725,6 +805,42 @@ public final class Interpreter {
                     case "toString" -> new Value.StringValue(args[0] instanceof Value.DoubleValue d
                             ? Double.toString(d.value()) : stringify(args[0]));
                     case "valueOf" -> new Value.DoubleValue(asDouble(args[0]));
+                    case "isNaN" -> new Value.IntValue(Double.isNaN(asDouble(args[0])) ? 1 : 0);
+                    default -> NO_INTRINSIC;
+                };
+            }
+            case "java.lang.Long" -> {
+                yield switch (name) {
+                    case "parseLong" -> {
+                        try {
+                            yield new Value.LongValue(Long.parseLong(stringValue(args[0]).trim()));
+                        } catch (NumberFormatException ex) {
+                            throw new InterpretedThrowable("java.lang.NumberFormatException",
+                                    "For input string: \"" + stringValue(args[0]) + "\"");
+                        }
+                    }
+                    case "toString" -> new Value.StringValue(args[0] instanceof Value.LongValue l
+                            ? Long.toString(l.value()) : stringify(args[0]));
+                    case "valueOf" -> new Value.LongValue(asLong(args[0]));
+                    case "compare" -> new Value.IntValue(Long.compare(asLong(args[0]), asLong(args[1])));
+                    default -> NO_INTRINSIC;
+                };
+            }
+            case "java.lang.Float" -> {
+                yield switch (name) {
+                    case "parseFloat" -> {
+                        try {
+                            yield new Value.FloatValue(Float.parseFloat(stringValue(args[0]).trim()));
+                        } catch (NumberFormatException ex) {
+                            throw new InterpretedThrowable("java.lang.NumberFormatException",
+                                    "For input string: \"" + stringValue(args[0]) + "\"");
+                        }
+                    }
+                    case "toString" -> new Value.StringValue(args[0] instanceof Value.FloatValue f
+                            ? Float.toString(f.value()) : stringify(args[0]));
+                    case "valueOf" -> new Value.FloatValue(asFloat(args[0]));
+                    case "compare" -> new Value.IntValue(Float.compare(asFloat(args[0]), asFloat(args[1])));
+                    case "isNaN" -> new Value.IntValue(Float.isNaN(asFloat(args[0])) ? 1 : 0);
                     default -> NO_INTRINSIC;
                 };
             }
@@ -876,29 +992,64 @@ public final class Interpreter {
         // Constructors belong to the class itself; other methods are inherited.
         List<ClassNode> candidates = name.equals("<init>") ? List.of(type) : hierarchy(type);
         for (ClassNode candidate : candidates) {
-            MethodNode fallback = null;
+            MethodNode widened = null;
             for (MethodNode method : candidate.methods) {
                 if (!method.name.equals(name)) continue;
                 Type[] parameters = Type.getArgumentTypes(method.desc);
                 if (parameters.length != args.length) continue;
+                boolean exact = true;
                 boolean compatible = true;
                 for (int i = 0; i < args.length; i++) {
+                    exact &= isExact(parameters[i], args[i]);
                     if (!isCompatible(parameters[i], args[i])) { compatible = false; break; }
                 }
-                if (compatible) return method;
-                if (fallback == null) fallback = method;
+                if (exact) return method;
+                if (compatible && widened == null) widened = method;
             }
-            if (fallback != null) return fallback;
+            if (widened != null) return widened;
         }
         throw new IllegalArgumentException("method not found: " + type.name + "." + name + "/" + args.length);
     }
 
+    private static boolean isExact(Type parameter, Value value) {
+        return switch (parameter.getSort()) {
+            case Type.INT, Type.BOOLEAN, Type.BYTE, Type.CHAR, Type.SHORT -> value instanceof Value.IntValue;
+            case Type.LONG -> value instanceof Value.LongValue;
+            case Type.FLOAT -> value instanceof Value.FloatValue;
+            case Type.DOUBLE -> value instanceof Value.DoubleValue;
+            case Type.ARRAY -> value instanceof Value.ArrayValue array
+                    && parameter.getElementType().getClassName().equals(array.value().componentType());
+            case Type.OBJECT -> !isNumeric(value);
+            default -> false;
+        };
+    }
+
+    /** Whether a call argument may widen into this parameter, as Java allows. */
     private static boolean isCompatible(Type parameter, Value value) {
         return switch (parameter.getSort()) {
             case Type.INT, Type.BOOLEAN, Type.BYTE, Type.CHAR, Type.SHORT -> value instanceof Value.IntValue;
-            case Type.DOUBLE, Type.FLOAT -> value instanceof Value.DoubleValue;
-            case Type.OBJECT, Type.ARRAY -> !(value instanceof Value.IntValue) && !(value instanceof Value.DoubleValue);
+            case Type.LONG -> value instanceof Value.IntValue || value instanceof Value.LongValue;
+            case Type.FLOAT -> value instanceof Value.IntValue || value instanceof Value.LongValue
+                    || value instanceof Value.FloatValue;
+            case Type.DOUBLE -> isNumeric(value);
+            case Type.OBJECT, Type.ARRAY -> !isNumeric(value);
             default -> false;
+        };
+    }
+
+    private static boolean isNumeric(Value value) {
+        return value instanceof Value.IntValue || value instanceof Value.LongValue
+                || value instanceof Value.FloatValue || value instanceof Value.DoubleValue;
+    }
+
+    /** Widens an argument to its parameter type, the way a Java method call does. */
+    private static Value coerce(Type parameter, Value value) {
+        if (value == null) return Value.NullValue.INSTANCE;
+        return switch (parameter.getSort()) {
+            case Type.LONG -> value instanceof Value.LongValue l ? l : new Value.LongValue(asLong(value));
+            case Type.FLOAT -> value instanceof Value.FloatValue f ? f : new Value.FloatValue(asFloat(value));
+            case Type.DOUBLE -> value instanceof Value.DoubleValue d ? d : new Value.DoubleValue(asDouble(value));
+            default -> value;
         };
     }
 
@@ -923,8 +1074,9 @@ public final class Interpreter {
 
     private static Value constant(Object value) {
         if (value instanceof Integer i) return new Value.IntValue(i);
+        if (value instanceof Long l) return new Value.LongValue(l);
+        if (value instanceof Float f) return new Value.FloatValue(f);
         if (value instanceof Double d) return new Value.DoubleValue(d);
-        if (value instanceof Float f) return new Value.DoubleValue(f.doubleValue());
         if (value instanceof String s) return new Value.StringValue(s);
         if (value instanceof Type t && t.getSort() == Type.OBJECT) return new Value.StringValue(t.getClassName());
         throw new IllegalArgumentException("unsupported constant: " + value);
@@ -933,7 +1085,9 @@ public final class Interpreter {
     private static Value defaultValue(Type type) {
         return switch (type.getSort()) {
             case Type.INT, Type.BOOLEAN, Type.BYTE, Type.CHAR, Type.SHORT -> new Value.IntValue(0);
-            case Type.DOUBLE, Type.FLOAT -> new Value.DoubleValue(0.0);
+            case Type.LONG -> new Value.LongValue(0L);
+            case Type.FLOAT -> new Value.FloatValue(0.0f);
+            case Type.DOUBLE -> new Value.DoubleValue(0.0);
             default -> Value.NullValue.INSTANCE;
         };
     }
@@ -948,6 +1102,28 @@ public final class Interpreter {
         double right = asDouble(pop(stack));
         double left = asDouble(pop(stack));
         push(stack, new Value.DoubleValue(operator.applyAsDouble(left, right)));
+    }
+
+    private static void binaryLong(List<Value> stack, java.util.function.LongBinaryOperator operator) {
+        long right = asLong(pop(stack));
+        long left = asLong(pop(stack));
+        push(stack, new Value.LongValue(operator.applyAsLong(left, right)));
+    }
+
+    private static void binaryFloat(List<Value> stack, java.util.function.DoubleBinaryOperator operator) {
+        float right = asFloat(pop(stack));
+        float left = asFloat(pop(stack));
+        push(stack, new Value.FloatValue((float) operator.applyAsDouble(left, right)));
+    }
+
+    private static long longDivide(long left, long right) {
+        if (right == 0) throw new InterpretedThrowable("java.lang.ArithmeticException", "/ by zero");
+        return left / right;
+    }
+
+    private static long longRemainder(long left, long right) {
+        if (right == 0) throw new InterpretedThrowable("java.lang.ArithmeticException", "/ by zero");
+        return left % right;
     }
 
     private static int divide(int left, int right) {
@@ -968,11 +1144,13 @@ public final class Interpreter {
     private static String primitiveName(int typeCode) {
         return switch (typeCode) {
             case 4 -> "boolean";
-            case 5 -> "double";
+            case 5 -> "char";
+            case 6 -> "float";
+            case 7 -> "double";
             case 8 -> "byte";
-            case 9 -> "char";
-            case 10 -> "short";
-            case 11 -> "int";
+            case 9 -> "short";
+            case 10 -> "int";
+            case 11 -> "long";
             default -> "int";
         };
     }
@@ -982,10 +1160,30 @@ public final class Interpreter {
         throw new InterpretedThrowable("java.lang.ClassCastException", "expected an int but got " + value);
     }
 
+    private static long asLong(Value value) {
+        if (value instanceof Value.LongValue longValue) return longValue.value();
+        if (value instanceof Value.IntValue intValue) return intValue.value();
+        throw new InterpretedThrowable("java.lang.ClassCastException", "expected a long but got " + value);
+    }
+
+    private static float asFloat(Value value) {
+        if (value instanceof Value.FloatValue floatValue) return floatValue.value();
+        if (value instanceof Value.IntValue intValue) return intValue.value();
+        if (value instanceof Value.LongValue longValue) return longValue.value();
+        throw new InterpretedThrowable("java.lang.ClassCastException", "expected a float but got " + value);
+    }
+
     private static double asDouble(Value value) {
         if (value instanceof Value.DoubleValue d) return d.value();
         if (value instanceof Value.IntValue i) return i.value();
+        if (value instanceof Value.LongValue l) return l.value();
+        if (value instanceof Value.FloatValue f) return f.value();
         throw new InterpretedThrowable("java.lang.ClassCastException", "expected a number but got " + value);
+    }
+
+    /** A value that occupies two JVM slots, which our stack stores as one entry. */
+    private static boolean isWide(Value value) {
+        return value instanceof Value.LongValue || value instanceof Value.DoubleValue;
     }
 
     private static String requireString(Value value, String method) {
@@ -1026,6 +1224,8 @@ public final class Interpreter {
     public static String stringify(Value value) {
         return switch (value) {
             case Value.IntValue i -> Integer.toString(i.value());
+            case Value.LongValue l -> Long.toString(l.value());
+            case Value.FloatValue f -> Float.toString(f.value());
             case Value.DoubleValue d -> Double.toString(d.value());
             case Value.StringValue s -> s.value();
             case Value.ObjectValue o -> o.value().className() + "@" + Integer.toHexString(System.identityHashCode(o.value()));

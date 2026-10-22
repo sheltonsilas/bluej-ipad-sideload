@@ -14,9 +14,12 @@ public struct FieldValue: Equatable, Hashable, Sendable, Identifiable {
 }
 
 /// A Java value crossing the bridge. Primitives are widened the way BlueJ's inspector shows
-/// them; booleans are carried as integers because that is what the protocol does.
+/// them; booleans are carried as integers because that is what the protocol does. `long` and
+/// `float` stay distinct from `int` and `double` so widths and formatting survive the trip.
 public enum CoreValue: Equatable, Hashable, Sendable {
     case int(Int)
+    case long(Int)
+    case float(Float)
     case double(Double)
     case string(String)
     case boolean(Bool)
@@ -32,6 +35,14 @@ public enum CoreValue: Equatable, Hashable, Sendable {
         }
         if let value = json["int"]?.intValue {
             self = .int(value)
+            return
+        }
+        if let value = json["long"]?.intValue {
+            self = .long(value)
+            return
+        }
+        if let value = json["float"]?.doubleValue {
+            self = .float(Float(value))
             return
         }
         if let value = json["double"]?.doubleValue {
@@ -68,6 +79,10 @@ public enum CoreValue: Equatable, Hashable, Sendable {
         switch self {
         case .int(let value):
             return .obj(JSONMember("int", .int(value)))
+        case .long(let value):
+            return .obj(JSONMember("long", .int(value)))
+        case .float(let value):
+            return .obj(JSONMember("float", .number(Double(value))))
         case .double(let value):
             return .obj(JSONMember("double", .number(value)))
         case .string(let value):
@@ -94,6 +109,8 @@ public enum CoreValue: Equatable, Hashable, Sendable {
     public var displayText: String {
         switch self {
         case .int(let value): return String(value)
+        case .long(let value): return String(value)
+        case .float(let value): return CoreValue.format(float: value)
         case .double(let value): return CoreValue.format(double: value)
         case .string(let value): return "\"" + value + "\""
         case .boolean(let value): return value ? "true" : "false"
@@ -122,6 +139,8 @@ public enum CoreValue: Equatable, Hashable, Sendable {
     public var literalText: String {
         switch self {
         case .int(let value): return String(value)
+        case .long(let value): return String(value)
+        case .float(let value): return CoreValue.format(float: value)
         case .double(let value): return CoreValue.format(double: value)
         case .string(let value): return value
         case .boolean(let value): return value ? "true" : "false"
@@ -132,9 +151,15 @@ public enum CoreValue: Equatable, Hashable, Sendable {
 
     public var isNumeric: Bool {
         switch self {
-        case .int, .double: return true
+        case .int, .long, .float, .double: return true
         default: return false
         }
+    }
+
+    public static func format(float value: Float) -> String {
+        if value.isNaN { return "NaN" }
+        if value.isInfinite { return value > 0 ? "Infinity" : "-Infinity" }
+        return String(value)
     }
 
     public static func format(double value: Double) -> String {
@@ -149,6 +174,12 @@ public enum CoreValue: Equatable, Hashable, Sendable {
     public static func simpleName(_ javaType: String) -> String {
         guard let last = javaType.split(separator: ".").last else { return javaType }
         return String(last)
+    }
+
+    /// Drops a Java literal suffix such as the `L` in `9000000000L` or the `f` in `2.5f`.
+    static func strippingJavaSuffix(_ text: String, _ suffixes: String) -> String {
+        guard let last = text.last, suffixes.contains(last), text.count > 1 else { return text }
+        return String(text.dropLast())
     }
 }
 
@@ -175,12 +206,22 @@ extension CoreValue {
     public static func argument(text: String, javaType: String) throws -> CoreValue {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         switch javaType {
-        case "int", "short", "byte", "long":
+        case "int", "short", "byte":
             guard let value = Int(trimmed) else { throw ValueParseError.invalidInt(trimmed) }
             return .int(value)
-        case "double", "float":
+        case "long":
+            guard let value = Int(CoreValue.strippingJavaSuffix(trimmed, "lL")) else {
+                throw ValueParseError.invalidInt(trimmed)
+            }
+            return .long(value)
+        case "double":
             guard let value = Double(trimmed) else { throw ValueParseError.invalidDouble(trimmed) }
             return .double(value)
+        case "float":
+            guard let value = Float(CoreValue.strippingJavaSuffix(trimmed, "fF")) else {
+                throw ValueParseError.invalidDouble(trimmed)
+            }
+            return .float(value)
         case "boolean":
             if trimmed == "true" { return .boolean(true) }
             if trimmed == "false" { return .boolean(false) }

@@ -174,6 +174,36 @@ class DebugSessionTest {
     }
 
     @Test
+    void showsLongAndFloatLocalsWithTheirTypes() {
+        CoreSession session = new CoreSession();
+        session.setSource("Wide.java", """
+                public class Wide {
+                    public static void main(String[] args) {
+                        long total = 5000000000L;
+                        float rate = 1.5f;
+                        total = total + 1;
+                        System.out.println(total + " " + rate);
+                    }
+                }
+                """);
+        assertTrue(session.compile().success());
+        session.setBreakpoints(List.of("Wide#6"));
+
+        DebugSession.Snapshot paused = session.debugStart("Wide", "main", List.of(Value.NullValue.INSTANCE));
+        assertEquals("paused", paused.status());
+        DebugSession.Frame frame = paused.frames().get(0);
+        assertEquals(6, frame.line());
+        assertEquals(new Value.LongValue(5_000_000_001L), local(frame, "total"));
+        assertEquals(new Value.FloatValue(1.5f), local(frame, "rate"));
+        assertTrue(frame.locals().stream().anyMatch(v -> v.name().equals("total") && v.type().equals("long")));
+        assertTrue(frame.locals().stream().anyMatch(v -> v.name().equals("rate") && v.type().equals("float")));
+
+        DebugSession.Snapshot finished = session.debugCommand("continue");
+        assertEquals("finished", finished.status());
+        assertEquals("5000000001 1.5\n", finished.output());
+    }
+
+    @Test
     void anUncaughtExceptionFinishesTheSessionAsFailed() {
         CoreSession session = new CoreSession();
         session.setSource("Boom.java", """

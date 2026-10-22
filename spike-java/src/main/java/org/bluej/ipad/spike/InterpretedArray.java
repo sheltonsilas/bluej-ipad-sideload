@@ -17,7 +17,8 @@ public final class InterpretedArray {
     private final Value[] elements;
 
     /**
-     * @param primitiveType JVM {@code newarray} type code (11 = int) or {@code 0} for a
+     * @param primitiveType JVM {@code newarray} type code (4 boolean, 5 char, 6 float,
+     *                      7 double, 8 byte, 9 short, 10 int, 11 long) or {@code 0} for a
      *                      reference array
      * @param componentType component type shown by the inspector, e.g. {@code int}
      */
@@ -27,12 +28,13 @@ public final class InterpretedArray {
         this.componentType = Objects.requireNonNull(componentType);
         this.elements = new Value[length];
         Value initial = switch (primitiveType) {
-            case 5 -> new Value.DoubleValue(0.0);   // T_FLOAT, modelled as double
-            case 6, 7 -> null;                      // T_DOUBLE, T_LONG unsupported below
-            default -> new Value.IntValue(0);
+            case 0 -> Value.NullValue.INSTANCE;      // reference array
+            case 6 -> new Value.FloatValue(0.0f);    // T_FLOAT
+            case 7 -> new Value.DoubleValue(0.0);    // T_DOUBLE
+            case 11 -> new Value.LongValue(0L);      // T_LONG
+            default -> new Value.IntValue(0);        // boolean, char, byte, short, int
         };
-        if (primitiveType == 0) initial = Value.NullValue.INSTANCE;
-        if (initial != null) Arrays.fill(elements, initial);
+        Arrays.fill(elements, initial);
     }
 
     public int length() { return elements.length; }

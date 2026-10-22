@@ -35,9 +35,11 @@ import org.bluej.ipad.spike.Value;
  * {"op":"reset"}                                             {"reset":true}
  * </pre>
  *
- * <p>Values encode as {@code {"int":n}}, {@code {"double":d}}, {@code {"string":s}},
- * {@code {"bool":b}}, {@code {"null":true}}, {@code {"ref":handle}} or
- * {@code {"array":{"component":"int","items":[...]}}}. Failures come back as
+ * <p>Values encode as {@code {"int":n}}, {@code {"long":n}}, {@code {"float":f}},
+ * {@code {"double":d}}, {@code {"string":s}}, {@code {"bool":b}}, {@code {"null":true}},
+ * {@code {"ref":handle}} or {@code {"array":{"component":"int","items":[...]}}}.
+ * A {@code float} travels as a JSON number so it keeps its 32-bit precision when the UI
+ * shows it; non-finite values travel as {@code null}. Failures come back as
  * {@code {"error":{"class":...,"message":...,"unsupported":..}}} and never as an exception
  * crossing the bridge.
  */
@@ -259,6 +261,8 @@ public final class CoreProtocol {
     static Object encode(Value value) {
         return switch (value) {
             case Value.IntValue i -> Map.of("int", i.value());
+            case Value.LongValue l -> Map.of("long", l.value());
+            case Value.FloatValue f -> Map.of("float", (double) f.value());
             case Value.DoubleValue d -> Map.of("double", d.value());
             case Value.StringValue s -> Map.of("string", s.value());
             case Value.NullValue n -> Map.of("null", true);
@@ -295,6 +299,8 @@ public final class CoreProtocol {
         if (!(element instanceof Map<?, ?> map)) throw new IllegalArgumentException("argument must be an object");
         if (map.containsKey("null")) return Value.NullValue.INSTANCE;
         if (map.containsKey("int")) return new Value.IntValue(integer(map.get("int")));
+        if (map.containsKey("long")) return new Value.LongValue(((Number) map.get("long")).longValue());
+        if (map.containsKey("float")) return new Value.FloatValue(((Number) map.get("float")).floatValue());
         if (map.containsKey("double")) return new Value.DoubleValue(((Number) map.get("double")).doubleValue());
         if (map.containsKey("string")) return new Value.StringValue(string(map.get("string")));
         if (map.containsKey("bool")) return new Value.IntValue(Boolean.TRUE.equals(map.get("bool")) ? 1 : 0);
@@ -303,10 +309,14 @@ public final class CoreProtocol {
             String component = string(array.get("component"));
             List<?> items = array.get("items") instanceof List<?> list ? list : List.of();
             int primitive = switch (component) {
-                case "int", "boolean", "byte" -> 11;
-                case "double" -> 5;
-                case "char" -> 9;
-                case "short" -> 10;
+                case "boolean" -> 4;
+                case "char" -> 5;
+                case "float" -> 6;
+                case "double" -> 7;
+                case "byte" -> 8;
+                case "short" -> 9;
+                case "int" -> 10;
+                case "long" -> 11;
                 default -> 0;
             };
             InterpretedArray created = new InterpretedArray(primitive, component, items.size());
