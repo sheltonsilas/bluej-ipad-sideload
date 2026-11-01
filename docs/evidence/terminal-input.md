@@ -34,6 +34,14 @@ Java, `spike-java` (64/64 green locally):
   `Doubler`, calls `twice()`, types `6` into the terminal field and sees
   `doubler1.twice() returned 12.` (CI).
 
+| Waiting for input | After sending 6 |
+| --- | --- |
+| ![Terminal input](terminal-input.png) | ![Terminal result](terminal-result.png) |
+
+Captured by the simulator UI test against the real core, so the screenshots show the app
+as built: the status chip says "Waiting for input", the field is labelled
+`doubler1.twice() needs input`, and the bench's `last` becomes 12 once the line is sent.
+
 ## Limits
 
 - One line per request; `System.in.read()`, `BufferedReader` and file redirection are not

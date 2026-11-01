@@ -53,6 +53,10 @@ for an in-process bridge that returns the same JSON, and no UI or model code cha
   `InputMismatchException` the way Java does. The *Welcome* project's `Doubler` class is the
   worked example: create one, call `twice()`, type a number.
 
+| Waiting for a number | The call finished |
+| --- | --- |
+| ![Terminal input](evidence/terminal-input.png) | ![Terminal result](evidence/terminal-result.png) |
+
 ## Running it
 
 Requirements: JDK 21, Maven, Xcode 16, [XcodeGen](https://github.com/yonaskolb/XcodeGen).

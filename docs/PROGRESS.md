@@ -12,7 +12,7 @@ the last two of them in CI, and the resulting unsigned iOS builds are released w
 | # | Proof | Evidence | Status |
 | --- | --- | --- | --- |
 | A | ECJ compiles a Java source string to bytecode in process | `spike-java` `InMemoryCompilerTest` (2 tests) on Windows and in [run 39205053696](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39205053696) | Proven, test scope only |
-| B | An interpreter executes compiled bytecode | 11 `InterpreterTest` cases: arithmetic, strings, branches/loops/switch, recursion, fields, arrays, statics, doubles, exceptions, output, budget, explicit failure on unsupported bytecode | Proven, now the BlueJ-intro subset |
+| B | An interpreter executes compiled bytecode | 18 `InterpreterTest` cases: arithmetic in every width, strings, branches/loops/switch, recursion, fields, arrays, statics, interfaces, `Scanner`, exceptions, output, budget, explicit failure on unsupported bytecode | Proven, now the BlueJ-intro subset |
 | C | Method invocation on an interpreted object | Constructor plus `increment(5) == 9`, `doubled() == 18`, field inspection; `BlueJShell` host self-test 18/18 including three protocol calls | Proven |
 | D | Java app built for iOS that yields an unsigned `.ipa` | [run 39205053650](https://github.com/sheltonsilas/bluej-ipad-sideload/actions/runs/39205053650): three green macOS jobs, arm64 iOS IPAs verified in CI by `ci/tools/verify-ipa.py` | Proven |
 
