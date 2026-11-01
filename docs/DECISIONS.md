@@ -36,3 +36,23 @@
   interpreter-native because JDI cannot attach to interpreted frames.
 - ECJ remains test-scope and EPL-2.0. Product compilation needs a GPL-compatible in-process
   compiler (the bundled OpenJDK javac is the leading candidate) before any integration.
+
+## 2026-11-01 — interactive terminal, interfaces, and no faux bridge
+
+- **Terminal input is an asynchronous protocol, not a pre-supplied buffer.** A call runs on
+  its own daemon thread; when `Scanner` reads, the request returns `{"status":"needsInput"}`
+  and the thread stays parked until `{"op":"stdin"}` or `{"op":"cancel"}` arrives. The
+  alternative (asking the student for all lines before the call) breaks BlueJ's prompt-and-read
+  workflow; a pre-buffer would also make `hasNext` behave differently from Java. The HTTP
+  server gained a four-thread pool so `stdin` and `output` can be served while a call waits.
+- **The debugger and the terminal are not wired together yet.** `readInput` refuses when a
+  debug session is active, which fails the debug run explicitly instead of parking a thread
+  that the debug loop cannot resume. Wiring `needsInput` through `DebugSession` is the next
+  step, not a hidden behaviour.
+- **Interfaces are resolved on the type hierarchy, not just the superclass chain.** Method
+  lookup walks superclasses and interfaces breadth-first (class methods win over interface
+  defaults), and `instanceof`/`catch` use the same reachability test. This is enough for the
+  intro-`interface` subset; `checkcast` is still structural (a wrong cast is not rejected).
+- **Do not fake the in-process bridge.** The app still talks to a host core. A C entry point
+  that is never linked into the Swift app would not remove that dependency, so the bridge
+  remains an explicit open task rather than a shipped-looking stub.

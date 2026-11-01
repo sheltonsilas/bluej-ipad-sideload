@@ -179,6 +179,85 @@ class InterpreterTest {
             }
             """;
 
+    private static final String SCANNER = """
+            import java.util.Scanner;
+
+            public class Reading {
+                public static int sum() {
+                    Scanner in = new Scanner(System.in);
+                    return in.nextInt() + in.nextInt();
+                }
+                public static String firstAndRest() {
+                    Scanner in = new Scanner(System.in);
+                    String first = in.next();
+                    return first + "|" + in.nextLine();
+                }
+                public static double average() {
+                    Scanner in = new Scanner(System.in);
+                    return (in.nextDouble() + in.nextDouble()) / 2;
+                }
+                public static String countThenLine() {
+                    Scanner in = new Scanner(System.in);
+                    int count = in.nextInt();
+                    in.nextLine();
+                    return count + ":" + in.nextLine();
+                }
+                public static String checks() {
+                    Scanner in = new Scanner(System.in);
+                    boolean number = in.hasNextInt();
+                    String token = in.next();
+                    return number + ":" + token;
+                }
+                public static String literal() {
+                    Scanner in = new Scanner("7 8");
+                    return "" + (in.nextInt() + in.nextInt());
+                }
+                public static int missing() {
+                    Scanner in = new Scanner(System.in);
+                    return in.nextInt();
+                }
+                public static void prompt() {
+                    Scanner in = new Scanner(System.in);
+                    System.out.print("Number: ");
+                    System.out.println(in.nextInt() * 2);
+                }
+            }
+            """;
+
+    private static final String INTERFACES = """
+            public class Shapes {
+                interface Shape {
+                    int area();
+                    default String label() { return "shape " + area(); }
+                }
+                static class Square implements Shape {
+                    private int side;
+                    Square(int side) { this.side = side; }
+                    public int area() { return side * side; }
+                }
+                static class Rect implements Shape {
+                    private int width, height;
+                    Rect(int width, int height) { this.width = width; this.height = height; }
+                    public int area() { return width * height; }
+                    public String label() { return "rect " + area(); }
+                }
+                public static int areas() {
+                    Shape[] shapes = { new Square(3), new Rect(2, 5) };
+                    int total = 0;
+                    for (Shape shape : shapes) { total += shape.area(); }
+                    return total;
+                }
+                public static String defaultLabel() { Shape shape = new Square(4); return shape.label(); }
+                public static String overrideLabel() { Shape shape = new Rect(2, 3); return shape.label(); }
+                public static boolean isShape() {
+                    Object object = new Square(2);
+                    Shape shape = (Shape) object;
+                    return object instanceof Shape && shape instanceof Square;
+                }
+                public static boolean notShape() { Object text = "not a shape"; return text instanceof Shape; }
+            }
+            """;
+
     private static final String OUTPUT = """
             public class Printer {
                 public static void run() {
@@ -194,6 +273,13 @@ class InterpreterTest {
         assertTrue(compilation.succeeded(), compilation.diagnostics());
         Interpreter interpreter = new Interpreter();
         interpreter.load(compilation.classes());
+        return interpreter;
+    }
+
+    /** Gives the program a fixed terminal: one queued line per call, then end of input. */
+    private static Interpreter withInput(Interpreter interpreter, String... lines) {
+        var queued = new java.util.ArrayDeque<>(java.util.List.of(lines));
+        interpreter.setInput(() -> queued.isEmpty() ? null : queued.poll());
         return interpreter;
     }
 
@@ -383,6 +469,54 @@ class InterpreterTest {
         Interpreter interpreter = compileAndLoad("Wide", WIDE_NUMBERS);
         interpreter.invokeStatic("Wide", "print");
         assertEquals("9000000000\n1.5\n0.75\n", interpreter.output());
+    }
+
+    @Test
+    void scannerReadsTokensLinesAndNumbersFromStandardInput() {
+        Interpreter sum = withInput(compileAndLoad("Reading", SCANNER), "4", "5");
+        assertEquals(new Value.IntValue(9), sum.invokeStatic("Reading", "sum"));
+
+        // nextLine() returns the rest of the current line, leading space included, as Java does.
+        Interpreter names = withInput(compileAndLoad("Reading", SCANNER), "Ada Lovelace");
+        assertEquals(new Value.StringValue("Ada| Lovelace"), names.invokeStatic("Reading", "firstAndRest"));
+
+        Interpreter numbers = withInput(compileAndLoad("Reading", SCANNER), "2.5", "3.5");
+        assertEquals(new Value.DoubleValue(3.0), numbers.invokeStatic("Reading", "average"));
+
+        // nextInt() leaves the line terminator for the following nextLine().
+        Interpreter lines = withInput(compileAndLoad("Reading", SCANNER), "2", "hello world");
+        assertEquals(new Value.StringValue("2:hello world"), lines.invokeStatic("Reading", "countThenLine"));
+
+        Interpreter checks = withInput(compileAndLoad("Reading", SCANNER), "42");
+        assertEquals(new Value.StringValue("true:42"), checks.invokeStatic("Reading", "checks"));
+
+        Interpreter literal = withInput(compileAndLoad("Reading", SCANNER));
+        assertEquals(new Value.StringValue("15"), literal.invokeStatic("Reading", "literal"));
+    }
+
+    @Test
+    void scannerReportsEndOfInputLikeJava() {
+        Interpreter interpreter = withInput(compileAndLoad("Reading", SCANNER));
+        InterpretedThrowable thrown = assertThrows(InterpretedThrowable.class,
+                () -> interpreter.invokeStatic("Reading", "missing"));
+        assertEquals("java.util.NoSuchElementException", thrown.className());
+    }
+
+    @Test
+    void scannerProgramsPrintTheirPromptBeforeReading() {
+        Interpreter interpreter = withInput(compileAndLoad("Reading", SCANNER), "21");
+        interpreter.invokeStatic("Reading", "prompt");
+        assertEquals("Number: 42\n", interpreter.output());
+    }
+
+    @Test
+    void interfacesDispatchDefaultsAndInstanceof() {
+        Interpreter interpreter = compileAndLoad("Shapes", INTERFACES);
+        assertEquals(new Value.IntValue(19), interpreter.invokeStatic("Shapes", "areas"));
+        assertEquals(new Value.StringValue("shape 16"), interpreter.invokeStatic("Shapes", "defaultLabel"));
+        assertEquals(new Value.StringValue("rect 6"), interpreter.invokeStatic("Shapes", "overrideLabel"));
+        assertEquals(new Value.IntValue(1), interpreter.invokeStatic("Shapes", "isShape"));
+        assertEquals(new Value.IntValue(0), interpreter.invokeStatic("Shapes", "notShape"));
     }
 
     @Test

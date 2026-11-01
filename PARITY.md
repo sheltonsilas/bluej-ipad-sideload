@@ -15,9 +15,9 @@ interpreter in `spike-java/`. Every claim below is backed by a test in this repo
 | Constructor dialog and object bench | PARTIAL | Constructors with parameters open a parameter sheet; objects get BlueJ-style names (`counter1`), can be removed, and are cleared on compile. The bench is session state, not persisted. |
 | Method calls, parameters and return values | PARTIAL | Instance and static calls with a parameter dialog; returns are logged (`counter1.increment() finished.`, `add(2,3) returned 5.`). Void calls are reported as finished rather than "returned null". |
 | Inspector and object reference navigation | PARTIAL | Instance fields in declaration order, with expandable objects and arrays. No reference graph, no computed properties. |
-| Terminal and Scanner input | PARTIAL | `System.out` output is captured and shown in the terminal. No `Scanner`/stdin, so programs that read input cannot run yet. |
+| Terminal and Scanner input | PARTIAL | `System.out` is captured; `Scanner` reads a line at a time from a terminal input field, and a parked program can be stopped. No `System.in.read()`, `BufferedReader`, redirection or input while the debugger is paused. |
 | Static method calls | DONE | Static methods (including `main`) are callable from the selected class, with arguments and results in the terminal. |
-| Introductory language subset | PARTIAL | Covered by the interpreter conformance tests: `int`, `long`, `float` and `double` arithmetic with Java's widening conversions, comparisons, branches, `switch`, loops, recursion, instance and static fields, static initialisers, arrays of every primitive and object arrays, string concatenation and intrinsics, `try`/`catch`. Missing: threads, synchronization, interfaces/default methods and most of the JDK. Unsupported bytecode fails explicitly. |
+| Introductory language subset | PARTIAL | Covered by 18 interpreter conformance tests: `int`, `long`, `float` and `double` arithmetic with Java's widening conversions, comparisons, branches, `switch`, loops, recursion, instance and static fields, static initialisers, arrays of every primitive and object arrays, string concatenation and intrinsics, `Scanner`, interfaces and default methods, `try`/`catch`. Missing: threads, synchronization and most of the JDK. Unsupported bytecode fails explicitly. |
 | Breakpoints, stepping and variable view | PARTIAL | Real debugger: breakpoints per `Class#line`, continue, step in/over/out, stop, current frame with locals, instance fields and the caller stack; debugging runs the class's `main` and pauses on the first line when no breakpoint is set. No conditional breakpoints, no watch expressions, no disassembly. |
 | JUnit support | UNSUPPORTED | Not implemented; no UI claims to run tests. |
 | Native iOS build of the app | PARTIAL | The SwiftUI app builds and runs in CI against the core over loopback HTTP; unsigned IPA build proofs exist for the Java shell (`v0.1.0-phase0`). The app still talks to a host core because an iPad has no JVM: the in-process bridge is not built yet. |
@@ -26,5 +26,5 @@ interpreter in `spike-java/`. Every claim below is backed by a test in this repo
 
 - Manual layout and association arrows on the diagram.
 - A debugger that can also debug bench objects and stop on exceptions.
-- Terminal input for `Scanner`, which needs a stdin channel in the protocol.
-- The in-process bridge, so the app runs without a host machine.
+- Input while the debugger is paused, which needs the debug loop to surface `needsInput` too.
+- The in-process bridge, so a released app does not need a host core.

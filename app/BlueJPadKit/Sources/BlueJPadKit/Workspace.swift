@@ -22,6 +22,19 @@ public final class Workspace: ObservableObject {
         }
     }
 
+    /// What the parked program is doing while it waits for a line of terminal input.
+    public struct TerminalPrompt: Equatable, Sendable {
+        public let owner: String
+        public let method: String
+
+        public var label: String { "\(owner).\(method)()" }
+
+        public init(owner: String, method: String) {
+            self.owner = owner
+            self.method = method
+        }
+    }
+
     public struct ConsoleEntry: Identifiable, Equatable {
         public let id: UUID
         public let text: String
@@ -51,6 +64,10 @@ public final class Workspace: ObservableObject {
     @Published public private(set) var debugSnapshot: DebugSnapshot?
     @Published public private(set) var breakpoints: [String: Set<Int>] = [:]
     @Published public private(set) var isDebugBusy = false
+    /// Set when a running method called Scanner: the terminal asks for one line.
+    @Published public private(set) var awaitingInput: TerminalPrompt?
+
+    public var isAwaitingInput: Bool { awaitingInput != nil }
 
     public let store: ProjectStore
     public let api: CoreAPI
@@ -91,6 +108,7 @@ public final class Workspace: ObservableObject {
         console = []
         selectedClass = nil
         debugSnapshot = nil
+        awaitingInput = nil
         status = "Choose a project"
         refreshProjects()
     }
@@ -158,7 +176,7 @@ public final class Workspace: ObservableObject {
     // MARK: - Compilation
 
     public func compile() async {
-        guard project != nil, !isBusy else { return }
+        guard project != nil, !isBusy, awaitingInput == nil else { return }
         isBusy = true
         defer { isBusy = false }
         await compileNow(pushingSources: true)
@@ -261,7 +279,7 @@ public final class Workspace: ObservableObject {
 
     @discardableResult
     public func instantiate(_ className: String, arguments: [CoreValue] = []) async -> BenchObject? {
-        guard !isBusy else { return nil }
+        guard !isBusy, awaitingInput == nil else { return nil }
         isBusy = true
         defer { isBusy = false }
         do {
@@ -279,17 +297,25 @@ public final class Workspace: ObservableObject {
 
     @discardableResult
     public func call(handle: Int, method: String, arguments: [CoreValue]) async -> CoreValue? {
-        guard !isBusy else { return nil }
+        guard !isBusy, awaitingInput == nil else { return nil }
         isBusy = true
         defer { isBusy = false }
         let objectName = bench.first { $0.handle == handle }?.name ?? "object"
         do {
-            let value = try await api.invoke(handle: handle, method: method, arguments: arguments)
-            bench = try await api.bench()
+            let outcome = try await api.invoke(handle: handle, method: method, arguments: arguments)
             connection = .ready
-            await captureOutput()
-            append(resultLine(objectName, method, value), isError: false)
-            return value
+            switch outcome {
+            case .value(let value):
+                bench = try await api.bench()
+                await captureOutput()
+                append(resultLine(objectName, method, value), isError: false)
+                return value
+            case .needsInput:
+                await captureOutput()
+                awaitingInput = TerminalPrompt(owner: objectName, method: method)
+                status = "Waiting for input"
+                return nil
+            }
         } catch {
             present(error, whileRunning: "\(objectName).\(method)()")
             return nil
@@ -298,18 +324,64 @@ public final class Workspace: ObservableObject {
 
     @discardableResult
     public func callStatic(className: String, method: String, arguments: [CoreValue]) async -> CoreValue? {
-        guard !isBusy else { return nil }
+        guard !isBusy, awaitingInput == nil else { return nil }
+        isBusy = true
+        defer { isBusy = false }
+        let owner = CoreValue.simpleName(className)
+        do {
+            let outcome = try await api.invokeStatic(className: className, method: method, arguments: arguments)
+            connection = .ready
+            switch outcome {
+            case .value(let value):
+                await captureOutput()
+                append(resultLine(owner, method, value), isError: false)
+                return value
+            case .needsInput:
+                await captureOutput()
+                awaitingInput = TerminalPrompt(owner: owner, method: method)
+                status = "Waiting for input"
+                return nil
+            }
+        } catch {
+            present(error, whileRunning: "\(owner).\(method)()")
+            return nil
+        }
+    }
+
+    /// Abandons a call that is waiting for input, so the project is usable again.
+    public func cancelInput() async {
+        guard awaitingInput != nil else { return }
+        do {
+            try await api.cancel()
+            awaitingInput = nil
+            await captureOutput()
+            append("Stopped the program.", isError: false)
+            status = "Stopped"
+        } catch {
+            present(error)
+        }
+    }
+
+    /// Sends one line to the parked program and shows whatever it does next.
+    public func submitInput(_ text: String) async {
+        guard let prompt = awaitingInput, !isBusy else { return }
         isBusy = true
         defer { isBusy = false }
         do {
-            let value = try await api.invokeStatic(className: className, method: method, arguments: arguments)
-            connection = .ready
+            let outcome = try await api.supplyInput(text)
             await captureOutput()
-            append(resultLine(CoreValue.simpleName(className), method, value), isError: false)
-            return value
+            switch outcome {
+            case .value(let value):
+                awaitingInput = nil
+                bench = try await api.bench()
+                append(resultLine(prompt.owner, prompt.method, value), isError: false)
+                status = "\(prompt.owner).\(prompt.method)() finished"
+            case .needsInput:
+                status = "Waiting for input"
+            }
         } catch {
-            present(error, whileRunning: "\(CoreValue.simpleName(className)).\(method)()")
-            return nil
+            awaitingInput = nil
+            present(error, whileRunning: "\(prompt.owner).\(prompt.method)()")
         }
     }
 
@@ -346,6 +418,7 @@ public final class Workspace: ObservableObject {
     }
 
     public func resetBench() async {
+        guard awaitingInput == nil else { return }
         do {
             try await api.clearBench()
             bench = []
@@ -436,6 +509,7 @@ public final class Workspace: ObservableObject {
     // MARK: - Console
 
     public func clearConsole() async {
+        guard awaitingInput == nil else { return }
         do {
             try await api.clearOutput()
             console = []

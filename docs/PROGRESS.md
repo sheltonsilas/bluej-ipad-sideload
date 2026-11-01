@@ -61,25 +61,27 @@ The interpreter now runs the BlueJ-intro subset: branches, loops, `switch`, recu
 and static fields, static initialisers, arrays of every primitive and object arrays, string
 concatenation, `String`/`Character`/`Math`/`Integer`/`Long`/`Float`/`Double` intrinsics,
 `System.out` capture, arithmetic on `int`, `long`, `float` and `double` with Java's widening
-conversions, and `try`/`catch` over user and runtime exceptions, with an instruction budget
-that stops runaway loops. Values keep their declared width through locals, fields, arrays, the
-inspector and the console, so a `long` stays 64-bit and a `float` prints as Java prints it.
-Evidence: 14 `InterpreterTest` cases
-([docs/evidence/interpreter-conformance.md](evidence/interpreter-conformance.md)) and a 15-check
-self-test of the iOS entry point ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)).
-Threads, synchronization, interfaces/default methods and most of the JDK are still unsupported
-and fail explicitly.
+conversions, interfaces with default methods, `Scanner` over a terminal line queue, and
+`try`/`catch` over user and runtime exceptions, with an instruction budget that stops runaway
+loops. Values keep their declared width through locals, fields, arrays, the inspector and the
+console, so a `long` stays 64-bit and a `float` prints as Java prints it. Evidence: 18
+`InterpreterTest` cases ([docs/evidence/interpreter-conformance.md](evidence/interpreter-conformance.md)),
+the terminal-input and interface cases in the session suite
+([docs/evidence/terminal-input.md](evidence/terminal-input.md)), and a 15-check self-test of
+the iOS entry point ([docs/evidence/ios-shell-host-selftest.md](evidence/ios-shell-host-selftest.md)).
+Threads, synchronization and most of the JDK are still unsupported and fail explicitly.
 
 The Java-core ↔ Swift-UI contract is now defined and tested: `org.bluej.ipad.core` exposes a
 synchronous, UI-free session (class metadata, bench handles, construction, calls, field
-snapshots, console capture) and a JSON protocol for the native bridge, documented in
-[CORE_PROTOCOL.md](CORE_PROTOCOL.md) with 10 headless tests
+snapshots, console capture, a parked call waiting for terminal input) and a JSON protocol for
+the native bridge, documented in [CORE_PROTOCOL.md](CORE_PROTOCOL.md) with 64 headless tests
 ([docs/evidence/core-session-protocol.md](evidence/core-session-protocol.md)). The iOS shell
 runs three protocol calls in its own self-test (18 checks total).
 
 The SwiftUI application now exists and is exercised end to end in CI: the iPad simulator opens
 the Welcome project, compiles it, draws the class diagram, creates and inspects objects, calls
-methods with parameters, and edits a new class — against the real core over loopback HTTP.
+methods with parameters, types a line into a `Scanner` program, and edits a new class — against
+the real core over loopback HTTP.
 
 ## Phase 2: the app, including a debugger
 
@@ -94,8 +96,8 @@ methods with parameters, and edits a new class — against the real core over lo
   inspector, bench and detail buttons unreachable to XCUITest and VoiceOver; containers now use
   `.accessibilityElement(children: .contain)`.
 
-Next: terminal input for `Scanner`, association arrows and manual layout on the diagram, and the
-in-process bridge that removes the host core.
+Next: input while the debugger is paused, association arrows and manual layout on the diagram,
+and the in-process bridge that removes the host core.
 
 ## What is deliberately not claimed
 

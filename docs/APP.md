@@ -46,6 +46,12 @@ for an in-process bridge that returns the same JSON, and no UI or model code cha
 - **Terminal** shows `System.out` output, method return values, and runtime exceptions with
   their Java class (`java.lang.ArithmeticException: / by zero`). Unsupported bytecode is
   reported as "not supported on iPad yet" rather than as a student error.
+- **Terminal input** works for `Scanner`: when a running method reads `System.in`, the
+  terminal shows an input field (and a Stop button) under the output. Type a line, press
+  Return or the send arrow, and the parked program continues; `nextInt`, `nextDouble`,
+  `nextLine`, `next` and `hasNext*` all read from it, and a bad token throws
+  `InputMismatchException` the way Java does. The *Welcome* project's `Doubler` class is the
+  worked example: create one, call `twice()`, type a number.
 
 ## Running it
 
@@ -91,8 +97,9 @@ xcodebuild test -project app/BlueJPad.xcodeproj -scheme BlueJPad \
 ```
 
 The UI tests open the Welcome project, compile it, create a `Counter`, inspect it, call
-`increment()` and `incrementBy(5)`, debug `Calculator.main` through a pause, a step and a finish,
-create a `Dog` class, edit it and save — with a screenshot attached at each step.
+`increment()` and `incrementBy(5)`, type terminal input into `Doubler.twice()`, debug
+`Calculator.main` through a pause, a step and a finish, create a `Dog` class, edit it and
+save — with a screenshot attached at each step.
 
 ## Screenshots from the CI run
 
@@ -120,10 +127,12 @@ executed source line, which is also what makes stepping land on lines rather tha
 ## Deliberate limits
 
 - The debugger only pauses on lines and breakpoints: no conditional breakpoints, watch
-  expressions or object-bench debugging yet.
-- No JUnit integration and no `Scanner`/stdin in the terminal.
-- Threads, synchronization, interfaces/default methods and most of the JDK are unsupported and
-  fail explicitly.
+  expressions or object-bench debugging yet. Reading terminal input while paused is refused
+  explicitly; run the program instead of debugging it when it uses `Scanner`.
+- No JUnit integration. `Scanner` is supported over the terminal line queue; `System.in.read()`,
+  `BufferedReader` and redirected files are not.
+- Threads, synchronization and most of the JDK are unsupported and fail explicitly. Interfaces
+  and default methods are supported.
 - The runtime covers `int`, `long`, `float` and `double` with Java's widening conversions,
   including arrays of every primitive and `Math`/`Long`/`Float` helpers. Values keep their
   declared width end to end, so `println` and the inspector format them as Java does.

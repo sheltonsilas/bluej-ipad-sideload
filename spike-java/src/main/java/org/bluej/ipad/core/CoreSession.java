@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import org.bluej.ipad.spike.InterpretedObject;
+import org.bluej.ipad.spike.InterpretedThrowable;
 import org.bluej.ipad.spike.Interpreter;
 import org.bluej.ipad.spike.Value;
 import org.objectweb.asm.ClassReader;
@@ -31,6 +32,12 @@ public final class CoreSession {
     public record CompileReport(boolean success, long revision, List<ClassInfo> classes,
             List<ProjectCompiler.Diagnostic> diagnostics) {}
 
+    /**
+     * The state of one bench call: either it finished with a value, or the program is parked
+     * waiting for a line of terminal input. {@link #supplyInput(String)} resumes it.
+     */
+    public record CallState(boolean needsInput, Value value) {}
+
     private record BenchEntry(int handle, String name, InterpretedObject object) {}
 
     private final Interpreter interpreter;
@@ -42,6 +49,8 @@ public final class CoreSession {
     private List<ProjectCompiler.Diagnostic> diagnostics = List.of();
     private int nextHandle = 1;
     private long revision;
+    private final Object runMonitor = new Object();
+    private volatile Run activeRun;
 
     public CoreSession() {
         this(new Interpreter());
@@ -50,6 +59,172 @@ public final class CoreSession {
     public CoreSession(Interpreter interpreter) {
         this.interpreter = interpreter;
         this.debug = new DebugSession(interpreter);
+        interpreter.setInput(this::readInput);
+    }
+
+    // ---------------------------------------------------------------- interactive calls
+
+    /**
+     * One call in flight. The interpreter runs on its own thread so the request that started
+     * it can return "needs input" and a later request can feed a line without re-entering
+     * the interpreter.
+     */
+    /** Thrown on the interpreter's thread when the student stops a call that is waiting. */
+    private static final class Cancelled extends RuntimeException {
+        Cancelled() { super("call cancelled", null, false, false); }
+    }
+
+    private final class Run {
+        private final Object lock = new Object();
+        private final java.util.ArrayDeque<String> lines = new java.util.ArrayDeque<>();
+        private boolean waiting;
+        private boolean closed;
+        private boolean cancelled;
+        private boolean done;
+        private Value value;
+        private Throwable failure;
+
+        String readLine() {
+            synchronized (lock) {
+                while (lines.isEmpty() && !closed && !cancelled) {
+                    waiting = true;
+                    lock.notifyAll();
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("input was interrupted");
+                    } finally {
+                        waiting = false;
+                    }
+                }
+                if (cancelled) throw new Cancelled();
+                return lines.pollFirst();
+            }
+        }
+    }
+
+    private String readInput() {
+        if (debug.active()) {
+            throw new UnsupportedOperationException(
+                    "reading terminal input during a debug run is not supported yet");
+        }
+        Run run;
+        synchronized (runMonitor) { run = activeRun; }
+        if (run == null) {
+            throw new IllegalStateException("Java input is only available while a method is running");
+        }
+        return run.readLine();
+    }
+
+    private CallState run(java.util.concurrent.Callable<Value> body) {
+        Run run = new Run();
+        synchronized (this) {
+            requireNoDebugSession();
+            if (activeRun != null) throw new IllegalStateException("a program is already waiting for input");
+            activeRun = run;
+        }
+        Thread worker = new Thread(() -> {
+            try {
+                run.value = body.call();
+            } catch (Throwable failure) {
+                run.failure = failure;
+            } finally {
+                synchronized (runMonitor) {
+                    if (activeRun == run) activeRun = null;
+                }
+                synchronized (run.lock) {
+                    run.done = true;
+                    run.lock.notifyAll();
+                }
+            }
+        }, "bluej-call");
+        worker.setDaemon(true);
+        worker.start();
+        return await(run);
+    }
+
+    private CallState await(Run run) {
+        synchronized (run.lock) {
+            while (!run.done && !run.waiting) {
+                try {
+                    run.lock.wait();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted while waiting for the program", interrupted);
+                }
+            }
+            if (!run.done) return new CallState(true, null);
+            if (run.failure instanceof InterpretedThrowable thrown) throw thrown;
+            if (run.failure instanceof RuntimeException runtime) throw runtime;
+            if (run.failure instanceof Error error) throw error;
+            if (run.failure != null) throw new IllegalStateException(run.failure);
+            return new CallState(false, run.value);
+        }
+    }
+
+    /**
+     * Feeds one line from the terminal to a program that asked for input, then waits until it
+     * finishes or asks for another line. {@code null} closes standard input (end of file).
+     */
+    public CallState supplyInput(String text) {
+        Run run;
+        synchronized (runMonitor) { run = activeRun; }
+        if (run == null) throw new IllegalArgumentException("no program is waiting for input");
+        synchronized (run.lock) {
+            if (!run.waiting) throw new IllegalArgumentException("the program is not asking for input");
+            // Claim the prompt: the next "waiting" this request sees must be a new read, not
+            // the one it is about to satisfy.
+            run.waiting = false;
+            if (text == null) {
+                run.closed = true;
+            } else {
+                String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                int start = 0;
+                boolean queued = false;
+                for (int i = 0; i < normalized.length(); i++) {
+                    if (normalized.charAt(i) != '\n') continue;
+                    run.lines.add(normalized.substring(start, i));
+                    start = i + 1;
+                    queued = true;
+                }
+                if (start < normalized.length()) {
+                    run.lines.add(normalized.substring(start));
+                    queued = true;
+                }
+                // Submitting an empty field means one empty line, which nextLine reads as "".
+                if (!queued) run.lines.add("");
+            }
+            run.lock.notifyAll();
+        }
+        return await(run);
+    }
+
+    private void requireNoRun() {
+        if (activeRun != null) throw new IllegalStateException("the program is waiting for input");
+    }
+
+    /**
+     * Stops a call that is parked on a terminal read. The interpreter thread unwinds with a
+     * private exception, so the session is usable again immediately.
+     */
+    public void cancelCall() {
+        Run run;
+        synchronized (runMonitor) { run = activeRun; }
+        if (run == null) return;
+        synchronized (run.lock) {
+            if (!run.waiting) return;
+            run.cancelled = true;
+            run.lock.notifyAll();
+            while (!run.done) {
+                try {
+                    run.lock.wait();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- debugger
@@ -96,12 +271,14 @@ public final class CoreSession {
 
     /** Adds or replaces a source file, keyed by project-relative path. */
     public synchronized long setSource(String path, String text) {
+        requireNoRun();
         sources.put(normalize(path), text == null ? "" : text);
         revision++;
         return revision;
     }
 
     public synchronized long deleteSource(String path) {
+        requireNoRun();
         sources.remove(normalize(path));
         revision++;
         return revision;
@@ -145,6 +322,7 @@ public final class CoreSession {
     /** Compiles every source, keeps the last good classes on failure and reports each class. */
     public synchronized CompileReport compile() {
         requireNoDebugSession();
+        requireNoRun();
         ProjectCompiler.Result result = compiler.compile(new LinkedHashMap<>(sources));
         diagnostics = result.diagnostics();
         if (result.success()) {
@@ -253,6 +431,7 @@ public final class CoreSession {
     /** Constructs an object and puts it on the bench under a BlueJ-style instance name. */
     public synchronized BenchObject create(String className, List<Value> arguments) {
         requireNoDebugSession();
+        requireNoRun();
         ClassInfo info = requireRunnable(className);
         InterpretedObject object = interpreter.newObject(className, arguments.toArray(Value[]::new));
         int handle = nextHandle++;
@@ -273,21 +452,30 @@ public final class CoreSession {
         return bench.values().stream().anyMatch(entry -> entry.name().equals(name));
     }
 
-    public synchronized Value invoke(int handle, String method, List<Value> arguments) {
-        requireNoDebugSession();
-        BenchEntry entry = bench.get(handle);
-        if (entry == null) throw new IllegalArgumentException("no bench object with handle " + handle);
-        return interpreter.invoke(entry.object(), method, arguments.toArray(Value[]::new));
+    /** Calls an instance method; returns either its value or a request for terminal input. */
+    public CallState invoke(int handle, String method, List<Value> arguments) {
+        InterpretedObject object;
+        synchronized (this) {
+            requireNoDebugSession();
+            BenchEntry entry = bench.get(handle);
+            if (entry == null) throw new IllegalArgumentException("no bench object with handle " + handle);
+            object = entry.object();
+        }
+        return run(() -> interpreter.invoke(object, method, arguments.toArray(Value[]::new)));
     }
 
-    public synchronized Value invokeStatic(String className, String method, List<Value> arguments) {
-        requireNoDebugSession();
-        requireRunnable(className);
-        return interpreter.invokeStatic(className, method, arguments.toArray(Value[]::new));
+    /** Calls a static method; returns either its value or a request for terminal input. */
+    public CallState invokeStatic(String className, String method, List<Value> arguments) {
+        synchronized (this) {
+            requireNoDebugSession();
+            requireRunnable(className);
+        }
+        return run(() -> interpreter.invokeStatic(className, method, arguments.toArray(Value[]::new)));
     }
 
     /** Re-reads fields so the inspector reflects calls made since the object was created. */
     public synchronized BenchObject inspect(int handle) {
+        requireNoRun();
         BenchEntry entry = bench.get(handle);
         if (entry == null) throw new IllegalArgumentException("no bench object with handle " + handle);
         return new BenchObject(handle, entry.name(), entry.object().className(), entry.object().fields());
@@ -308,17 +496,20 @@ public final class CoreSession {
     }
 
     public synchronized void removeObject(int handle) {
+        requireNoRun();
         if (bench.remove(handle) == null) {
             throw new IllegalArgumentException("no bench object with handle " + handle);
         }
     }
 
     public synchronized void clearBench() {
+        requireNoRun();
         bench.clear();
     }
 
     public synchronized void reset() {
         requireNoDebugSession();
+        requireNoRun();
         sources.clear();
         bytecode.clear();
         bench.clear();

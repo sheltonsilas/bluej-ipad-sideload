@@ -58,7 +58,7 @@ class ProjectWorkflowTest {
         session.invoke(counter.handle(), "increment", List.of());
         assertEquals(new Value.IntValue(2), session.inspect(counter.handle()).fields().get("count"));
 
-        assertEquals(new Value.StringValue("count"), session.invokeStatic("Counter", "label", List.of()));
+        assertEquals(new Value.StringValue("count"), session.invokeStatic("Counter", "label", List.of()).value());
 
         BenchObject second = session.create("Counter", List.of());
         assertEquals("counter2", second.name());
@@ -142,9 +142,9 @@ class ProjectWorkflowTest {
         BenchObject rex = session.create("Dog", List.of(new Value.StringValue("Rex")));
         assertEquals(new Value.StringValue("Rex"), rex.fields().get("name"),
                 "inherited fields exist on the instance");
-        assertEquals(new Value.StringValue("Rex says woof"), session.invoke(rex.handle(), "speak", List.of()));
-        assertEquals(new Value.StringValue("Rex"), session.invoke(rex.handle(), "getName", List.of()));
-        assertEquals(new Value.IntValue(4), session.invoke(rex.handle(), "legs", List.of()));
+        assertEquals(new Value.StringValue("Rex says woof"), session.invoke(rex.handle(), "speak", List.of()).value());
+        assertEquals(new Value.StringValue("Rex"), session.invoke(rex.handle(), "getName", List.of()).value());
+        assertEquals(new Value.IntValue(4), session.invoke(rex.handle(), "legs", List.of()).value());
     }
 
     @Test
@@ -161,14 +161,14 @@ class ProjectWorkflowTest {
                 """);
         assertTrue(session.compile().success());
         assertEquals(new Value.LongValue(4_000_000_000L),
-                session.invokeStatic("Wide", "twice", List.of(new Value.LongValue(2_000_000_000L))));
+                session.invokeStatic("Wide", "twice", List.of(new Value.LongValue(2_000_000_000L))).value());
         assertEquals(new Value.FloatValue(0.25f),
-                session.invokeStatic("Wide", "ratio", List.of(new Value.LongValue(1), new Value.LongValue(4))));
+                session.invokeStatic("Wide", "ratio", List.of(new Value.LongValue(1), new Value.LongValue(4))).value());
 
         BenchObject wide = session.create("Wide", List.of(new Value.LongValue(5_000_000_000L)));
         assertEquals(new Value.LongValue(5_000_000_000L), wide.fields().get("total"));
         assertEquals(new Value.LongValue(6_000_000_000L),
-                session.invoke(wide.handle(), "add", List.of(new Value.LongValue(1_000_000_000L))));
+                session.invoke(wide.handle(), "add", List.of(new Value.LongValue(1_000_000_000L))).value());
     }
 
     @Test

@@ -3,6 +3,14 @@ import SwiftUI
 
 struct ConsolePanel: View {
     @ObservedObject var workspace: Workspace
+    @State private var input = ""
+    @FocusState private var inputFocused: Bool
+
+    private func send() {
+        let line = input
+        input = ""
+        Task { await workspace.submitInput(line) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,7 +59,44 @@ struct ConsolePanel: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("consoleText")
+
+            if let prompt = workspace.awaitingInput {
+                Divider()
+                HStack(spacing: 8) {
+                    Text("\(prompt.label) needs input")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("stdinPrompt")
+                    TextField("Type a line", text: $input)
+                        .font(Theme.monoSmall)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .submitLabel(.send)
+                        .focused($inputFocused)
+                        .onSubmit(send)
+                        .accessibilityIdentifier("stdinField")
+                    Button(action: send) {
+                        Image(systemName: "arrow.up.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Send input")
+                    .accessibilityIdentifier("stdinSendButton")
+                    Button("Stop") {
+                        Task { await workspace.cancelInput() }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("stdinCancelButton")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
         }
         .background(Theme.panel)
+        .onChange(of: workspace.awaitingInput) { _, prompt in
+            if prompt != nil { inputFocused = true }
+        }
     }
 }

@@ -23,6 +23,9 @@ Implementation and tests: `spike-java/src/main/java/org/bluej/ipad/core/` and
 | `{"op":"new","class":"Counter","args":[…]}` | `{"handle":1,"class":"Counter","fields":{…}}` |
 | `{"op":"invoke","handle":1,"method":"increment","args":[{"int":5}]}` | `{"value":{"int":9}}` |
 | `{"op":"invokeStatic","class":"Counter","method":"sumTo","args":[{"int":6}]}` | `{"value":{"int":30}}` |
+| a call whose program reads `System.in` | `{"status":"needsInput","output":"…"}` |
+| `{"op":"stdin","text":"21"}` | the paused call's `{"value":…}` or another `needsInput` |
+| `{"op":"cancel"}` | `{"cancelled":true}` |
 | `{"op":"inspect","handle":1}` | `{"handle":1,"class":"Counter","fields":{…}}` |
 | `{"op":"bench"}` | `{"bench":[{"handle","name","class","fields"}, …]}` |
 | `{"op":"removeObject","handle":1}` | `{"removed":true}` |
@@ -41,6 +44,26 @@ A failed compile keeps the last good class files, marks the classes whose source
 Handles are session-scoped, start at 1 and are never reused. `name` is the BlueJ-style
 instance name (`counter1`). Fields are a snapshot taken at the moment of the call;
 `inspect`/`bench` re-read them after later mutations.
+
+## Terminal input
+
+`Scanner` reads `System.in` through a line queue owned by the core. A call that reaches a
+read returns `{"status":"needsInput","output":"…"}` instead of a value, and the program
+stays parked on its own thread. The UI shows the output printed before the read (usually the
+prompt) and sends one line per `stdin` request; the reply is either the call's value or
+another `needsInput` when the program reads again. `cancel` unwinds a parked call so the
+project is usable again.
+
+```
+{"op":"invoke","handle":1,"method":"twice"}   → {"status":"needsInput","output":"Number: "}
+{"op":"stdin","text":"21"}                  → {"value":{"int":42}}
+```
+
+The session refuses `compile`, `reset`, `new`, `invoke`, `invokeStatic`, `inspect` and
+`removeObject` while a call is parked; `output` and `stdin` are served normally. A
+constructor that reads input is rejected, and reading input while a debug run is paused
+fails explicitly (the debugger and the terminal are not yet wired together). A call without
+input behaves exactly as before: one request, one `{"value":…}`.
 
 ## Debugger
 

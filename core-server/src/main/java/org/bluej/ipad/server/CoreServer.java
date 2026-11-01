@@ -25,8 +25,9 @@ import org.bluej.ipad.core.CoreSession;
  * POST /rpc      request JSON -&gt; response JSON
  * </pre>
  *
- * <p>Requests are served one at a time, matching the single-outstanding-request contract of
- * the protocol and keeping the interpreter's state deterministic.
+ * <p>The session still runs one call at a time, but the server needs a few threads: a call
+ * that blocks for terminal input leaves its request parked, and {@code stdin} and
+ * {@code output} requests have to be served while it waits.
  */
 public final class CoreServer implements AutoCloseable {
 
@@ -101,8 +102,11 @@ public final class CoreServer implements AutoCloseable {
             }
             respond(exchange, 200, "BlueJ iPad core server\nPOST /rpc with protocol JSON, GET /health\n");
         });
-        server.setExecutor(Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "bluej-core");
+        // Four is enough for the parked call, the stdin reply, an output poll and one spare;
+        // CoreSession serialises every mutating operation anyway.
+        java.util.concurrent.atomic.AtomicInteger workers = new java.util.concurrent.atomic.AtomicInteger();
+        server.setExecutor(Executors.newFixedThreadPool(4, runnable -> {
+            Thread thread = new Thread(runnable, "bluej-core-" + workers.incrementAndGet());
             thread.setDaemon(true);
             return thread;
         }));

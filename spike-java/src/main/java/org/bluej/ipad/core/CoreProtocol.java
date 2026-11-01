@@ -25,7 +25,10 @@ import org.bluej.ipad.spike.Value;
  * {"op":"classes"}                                           {"classes":[...]}
  * {"op":"new","class":"Counter","args":[{"int":4}]}          {"handle":1,"name":"counter1",...}
  * {"op":"invoke","handle":1,"method":"increment","args":[…]} {"value":{"int":9}}
+ *                                                        or  {"status":"needsInput","output":"…"}
  * {"op":"invokeStatic","class":"Counter","method":"sumTo"}   {"value":{"int":30}}
+ * {"op":"stdin","text":"5\n"}                               the same shape, for the paused call
+ * {"op":"cancel"}                                          {"cancelled":true}
  * {"op":"inspect","handle":1}                                {"handle":1,"class":"Counter","fields":{…}}
  * {"op":"bench"}                                             {"bench":[...]}
  * {"op":"removeObject","handle":1}                           {"removed":true}
@@ -77,10 +80,13 @@ public final class CoreProtocol {
             case "newClass" -> newClass(request);
             case "compile" -> compile();
             case "new" -> newObject(request);
-            case "invoke" -> Map.of("value", encode(session.invoke(integer(request.get("handle")),
-                    string(request.get("method")), arguments(request))));
-            case "invokeStatic" -> Map.of("value", encode(session.invokeStatic(string(request.get("class")),
-                    string(request.get("method")), arguments(request))));
+            case "invoke" -> encodeCall(session.invoke(integer(request.get("handle")),
+                    string(request.get("method")), arguments(request)));
+            case "invokeStatic" -> encodeCall(session.invokeStatic(string(request.get("class")),
+                    string(request.get("method")), arguments(request)));
+            case "stdin" -> encodeCall(session.supplyInput(
+                    request.containsKey("text") ? string(request.get("text")) : null));
+            case "cancel" -> { session.cancelCall(); yield Map.of("cancelled", true); }
             case "inspect" -> encodeBench(session.inspect(integer(request.get("handle"))));
             case "bench" -> Map.of("bench", session.bench().stream().map(CoreProtocol::encodeBench).toList());
             case "removeObject" -> { session.removeObject(integer(request.get("handle"))); yield Map.of("removed", true); }
@@ -94,6 +100,22 @@ public final class CoreProtocol {
             case "reset" -> { session.reset(); yield Map.of("reset", true); }
             default -> throw new IllegalArgumentException("unknown op: " + op);
         };
+    }
+
+    /**
+     * A call either returns its value or parks the program until {@code stdin} delivers a
+     * line. The output is included with a prompt so the UI can show what was printed before
+     * the program blocked.
+     */
+    private Map<String, Object> encodeCall(CoreSession.CallState state) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        if (state.needsInput()) {
+            response.put("status", "needsInput");
+            response.put("output", session.output());
+        } else {
+            response.put("value", encode(state.value()));
+        }
+        return response;
     }
 
     private Map<String, Object> debugStart(Map<?, ?> request) {

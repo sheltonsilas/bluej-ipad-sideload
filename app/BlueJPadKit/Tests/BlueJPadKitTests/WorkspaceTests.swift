@@ -10,6 +10,8 @@ private final class FakeCore: @unchecked Sendable {
     var diagnostics: [Diagnostic] = []
     var invokeResult: CoreValue = .int(1)
     var invokeFailure: CoreFailure?
+    var invokeNeedsInput = false
+    var stdinResult: CoreValue = .int(12)
     var output = ""
 
     var operations: [String] {
@@ -93,6 +95,12 @@ private final class FakeCore: @unchecked Sendable {
         case "bench":
             return .obj(JSONMember("bench", .array(benchJSON())))
         case "invoke", "invokeStatic":
+            if invokeNeedsInput {
+                return .obj(
+                    JSONMember("status", .string("needsInput")),
+                    JSONMember("output", .string(output))
+                )
+            }
             if let failure = invokeFailure {
                 return .obj(JSONMember("error", .obj(
                     JSONMember("class", .string(failure.className)),
@@ -101,6 +109,12 @@ private final class FakeCore: @unchecked Sendable {
                 )))
             }
             return .obj(JSONMember("value", invokeResult.jsonArgument))
+        case "stdin":
+            invokeNeedsInput = false
+            return .obj(JSONMember("value", stdinResult.jsonArgument))
+        case "cancel":
+            invokeNeedsInput = false
+            return .obj(JSONMember("cancelled", .bool(true)))
         case "output":
             return .obj(JSONMember("output", .string(output)))
         case "clearOutput", "clearBench":
@@ -186,6 +200,46 @@ final class WorkspaceTests: XCTestCase {
         let result = await fixture.workspace.call(handle: 1, method: "increment", arguments: [])
         XCTAssertEqual(result, .int(3))
         XCTAssertTrue(fixture.workspace.console.contains { $0.text.contains("counter1.increment() returned 3") })
+    }
+
+    func testACallCanAskTheTerminalForInput() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+
+        fixture.core.output = "Number: "
+        fixture.core.invokeNeedsInput = true
+        let parked = await fixture.workspace.call(handle: 1, method: "twice", arguments: [])
+
+        XCTAssertNil(parked, "a parked call has no value yet")
+        XCTAssertEqual(fixture.workspace.awaitingInput?.label, "counter1.twice()")
+        XCTAssertEqual(fixture.workspace.status, "Waiting for input")
+        XCTAssertTrue(fixture.workspace.console.contains { $0.text == "Number: " })
+
+        fixture.core.stdinResult = .int(12)
+        await fixture.workspace.submitInput("6")
+
+        XCTAssertNil(fixture.workspace.awaitingInput)
+        XCTAssertTrue(fixture.core.operations.contains("stdin"))
+        XCTAssertTrue(fixture.workspace.console.contains {
+            $0.text.contains("counter1.twice() returned 12")
+        })
+    }
+
+    func testAWaitingProgramCanBeStopped() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
+        await fixture.workspace.openProject("Demo")
+
+        fixture.core.invokeNeedsInput = true
+        _ = await fixture.workspace.call(handle: 1, method: "twice", arguments: [])
+        XCTAssertNotNil(fixture.workspace.awaitingInput)
+
+        await fixture.workspace.cancelInput()
+
+        XCTAssertNil(fixture.workspace.awaitingInput)
+        XCTAssertTrue(fixture.core.operations.contains("cancel"))
+        XCTAssertTrue(fixture.workspace.console.contains { $0.text == "Stopped the program." })
     }
 
     func testRuntimeExceptionsAreReportedLikeBlueJ() async throws {

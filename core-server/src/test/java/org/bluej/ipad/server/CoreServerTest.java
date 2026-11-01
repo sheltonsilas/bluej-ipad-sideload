@@ -109,6 +109,29 @@ class CoreServerTest {
     }
 
     @Test
+    void pausesForTerminalInputOverHttp() throws Exception {
+        String source = "import java.util.Scanner;\\n"
+                + "public class Reader {\\n"
+                + "  public static int read() {\\n"
+                + "    Scanner in = new Scanner(System.in);\\n"
+                + "    System.out.print(\\\"Number: \\\");\\n"
+                + "    return in.nextInt();\\n"
+                + "  }\\n"
+                + "}\\n";
+        assertEquals(true, rpc("{\"op\":\"setSource\",\"path\":\"Reader.java\",\"text\":\"" + source + "\"}")
+                .get("saved"));
+        assertEquals(true, rpc("{\"op\":\"compile\"}").get("success"));
+
+        Map<String, Object> waiting = rpc(
+                "{\"op\":\"invokeStatic\",\"class\":\"Reader\",\"method\":\"read\"}");
+        assertEquals("needsInput", waiting.get("status"));
+        assertEquals("Number: ", waiting.get("output"));
+
+        Map<String, Object> done = rpc("{\"op\":\"stdin\",\"text\":\"12\"}");
+        assertEquals(Map.of("int", 12L), done.get("value"));
+    }
+
+    @Test
     void errorsStayInBandAndMalformedRequestsAreRejected() throws Exception {
         Map<String, Object> unknown = rpc("{\"op\":\"nonsense\"}");
         assertTrue(((Map<?, ?>) unknown.get("error")).get("message").toString().contains("unknown op"));

@@ -313,9 +313,37 @@ public enum StarterProject {
 
     """
 
+    public static let doubler = """
+    import java.util.Scanner;
+
+    /**
+     * Asks the terminal for a number, the way an interactive program does.
+     */
+    public class Doubler
+    {
+        private int last;
+
+        public int twice()
+        {
+            Scanner in = new Scanner(System.in);
+            System.out.print("Number: ");
+            int value = in.nextInt() * 2;
+            last = value;
+            return value;
+        }
+
+        public int getLast()
+        {
+            return last;
+        }
+    }
+
+    """
+
     public static let files: [(path: String, text: String)] = [
         ("Counter.java", counter),
         ("Greeter.java", greeter),
-        ("Calculator.java", calculator)
+        ("Calculator.java", calculator),
+        ("Doubler.java", doubler)
     ]
 }

@@ -58,7 +58,8 @@ final class ProjectStoreTests: XCTestCase {
         XCTAssertEqual(second.map(\.name), ["Welcome"])
 
         let sources = try store.sources(in: "Welcome")
-        XCTAssertEqual(Set(sources.map(\.path)), ["Calculator.java", "Counter.java", "Greeter.java"])
+        XCTAssertEqual(Set(sources.map(\.path)),
+                       ["Calculator.java", "Counter.java", "Doubler.java", "Greeter.java"])
         XCTAssertTrue(sources.allSatisfy { $0.text.contains("public class") })
     }
 

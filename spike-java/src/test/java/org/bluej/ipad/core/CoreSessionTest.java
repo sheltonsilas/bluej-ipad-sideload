@@ -26,6 +26,30 @@ class CoreSessionTest {
             }
             """;
 
+    private static final String READING = """
+            import java.util.Scanner;
+
+            public class Reading {
+                public static int twice() {
+                    Scanner in = new Scanner(System.in);
+                    System.out.print("Number: ");
+                    int value = in.nextInt() * 2;
+                    System.out.println(value);
+                    return value;
+                }
+                public static String join() {
+                    Scanner in = new Scanner(System.in);
+                    return in.nextLine() + "+" + in.nextLine();
+                }
+                public static String promptThenLine() {
+                    Scanner in = new Scanner(System.in);
+                    System.out.print("Name: ");
+                    String name = in.nextLine().trim();
+                    return "Hello " + name;
+                }
+            }
+            """;
+
     private static CoreSession session() {
         CoreSession session = new CoreSession();
         load(session, "Counter", COUNTER);
@@ -61,10 +85,11 @@ class CoreSessionTest {
         assertEquals("Counter", created.className());
         assertEquals(new Value.IntValue(4), created.fields().get("count"));
 
-        assertEquals(new Value.IntValue(9), session.invoke(created.handle(), "increment", List.of(new Value.IntValue(5))));
+        assertEquals(new Value.IntValue(9),
+                session.invoke(created.handle(), "increment", List.of(new Value.IntValue(5))).value());
         assertEquals(new Value.IntValue(9), session.inspect(created.handle()).fields().get("count"));
         assertEquals(1, session.bench().size());
-        assertEquals(new Value.IntValue(1), session.invokeStatic("Counter", "created", List.of()));
+        assertEquals(new Value.IntValue(1), session.invokeStatic("Counter", "created", List.of()).value());
     }
 
     @Test
@@ -73,6 +98,70 @@ class CoreSessionTest {
         assertThrows(IllegalArgumentException.class, () -> session.create("Missing", List.of()));
         assertThrows(IllegalArgumentException.class, () -> session.invoke(99, "increment", List.of(new Value.IntValue(1))));
         assertThrows(IllegalArgumentException.class, () -> session.reference(99));
+    }
+
+    @Test
+    void aCallThatReadsInputWaitsForTheTerminal() {
+        CoreSession session = session();
+        load(session, "Reading", READING);
+
+        CoreSession.CallState waiting = session.invokeStatic("Reading", "twice", List.of());
+        assertTrue(waiting.needsInput());
+        assertNull(waiting.value());
+        assertEquals("Number: ", session.output(), "output printed before the read is visible");
+
+        // Changing the project under the parked call is refused, not raced.
+        assertThrows(IllegalStateException.class, session::compile);
+        assertThrows(IllegalStateException.class, () -> session.create("Counter", List.of()));
+
+        CoreSession.CallState done = session.supplyInput("21");
+        assertFalse(done.needsInput());
+        assertEquals(new Value.IntValue(42), done.value());
+        assertEquals("Number: 42\n", session.output());
+    }
+
+    @Test
+    void eachReadParksAgainUntilTheProgramFinishes() {
+        CoreSession session = session();
+        load(session, "Reading", READING);
+
+        CoreSession.CallState first = session.invokeStatic("Reading", "join", List.of());
+        assertTrue(first.needsInput());
+        CoreSession.CallState second = session.supplyInput("Ada");
+        assertTrue(second.needsInput());
+        CoreSession.CallState done = session.supplyInput("Lovelace");
+        assertEquals(new Value.StringValue("Ada+Lovelace"), done.value());
+    }
+
+    @Test
+    void cancellingAWaitingCallMakesTheSessionUsableAgain() {
+        CoreSession session = session();
+        load(session, "Reading", READING);
+
+        assertTrue(session.invokeStatic("Reading", "twice", List.of()).needsInput());
+        session.cancelCall();
+
+        assertThrows(IllegalArgumentException.class, () -> session.supplyInput("5"));
+        assertEquals(new Value.IntValue(6),
+                session.invokeStatic("Counter", "arithmetic", List.of(new Value.IntValue(0))).value());
+        assertTrue(session.compile().success(), "the paused program no longer blocks compilation");
+    }
+
+    @Test
+    void supplyingInputWithNoWaitingProgramIsRejected() {
+        CoreSession session = session();
+        assertThrows(IllegalArgumentException.class, () -> session.supplyInput("5"));
+    }
+
+    @Test
+    void inputDuringADebugRunFailsInsteadOfHanging() {
+        CoreSession session = new CoreSession();
+        load(session, "Reading", READING);
+        session.debugStart("Reading", "promptThenLine", List.of());
+        assertTrue(session.debugging());
+        DebugSession.Snapshot snapshot = session.debugCommand("continue");
+        assertEquals("failed", snapshot.status());
+        assertTrue(snapshot.errorMessage().contains("input"), snapshot.errorMessage());
     }
 
     @Test

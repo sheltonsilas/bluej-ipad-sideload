@@ -1,5 +1,11 @@
 import Foundation
 
+/// What a call did: returned a value, or parked the program until the terminal supplies a line.
+public enum CallOutcome: Equatable, Sendable {
+    case value(CoreValue)
+    case needsInput
+}
+
 /// Typed wrapper around the JSON protocol. Every UI action goes through one of these calls,
 /// which keeps the wire format in exactly one place.
 public struct CoreAPI: Sendable {
@@ -75,24 +81,38 @@ public struct CoreAPI: Sendable {
         return BenchObject(json: response)
     }
 
-    public func invoke(handle: Int, method: String, arguments: [CoreValue] = []) async throws -> CoreValue {
+    public func invoke(handle: Int, method: String, arguments: [CoreValue] = []) async throws -> CallOutcome {
         let response = try await call(.obj(
             JSONMember("op", .string("invoke")),
             JSONMember("handle", .int(handle)),
             JSONMember("method", .string(method)),
             JSONMember("args", .array(arguments.map(\.jsonArgument)))
         ))
-        return try Self.value(from: response)
+        return try Self.outcome(from: response)
     }
 
-    public func invokeStatic(className: String, method: String, arguments: [CoreValue] = []) async throws -> CoreValue {
+    public func invokeStatic(className: String, method: String, arguments: [CoreValue] = []) async throws -> CallOutcome {
         let response = try await call(.obj(
             JSONMember("op", .string("invokeStatic")),
             JSONMember("class", .string(className)),
             JSONMember("method", .string(method)),
             JSONMember("args", .array(arguments.map(\.jsonArgument)))
         ))
-        return try Self.value(from: response)
+        return try Self.outcome(from: response)
+    }
+
+    /// Stops a call that is parked on a terminal read.
+    public func cancel() async throws {
+        _ = try await call(.obj(JSONMember("op", .string("cancel"))))
+    }
+
+    /// Answers the parked program's `Scanner`. The response is the same shape as a call's.
+    public func supplyInput(_ text: String) async throws -> CallOutcome {
+        let response = try await call(.obj(
+            JSONMember("op", .string("stdin")),
+            JSONMember("text", .string(text))
+        ))
+        return try Self.outcome(from: response)
     }
 
     public func bench() async throws -> [BenchObject] {
@@ -169,10 +189,11 @@ public struct CoreAPI: Sendable {
         _ = try await call(.obj(JSONMember("op", .string("reset"))))
     }
 
-    private static func value(from response: JSONValue) throws -> CoreValue {
+    private static func outcome(from response: JSONValue) throws -> CallOutcome {
+        if response["status"]?.stringValue == "needsInput" { return .needsInput }
         guard let encoded = response["value"], let value = CoreValue(json: encoded) else {
             throw CoreError.protocolViolation("missing value")
         }
-        return value
+        return .value(value)
     }
 }

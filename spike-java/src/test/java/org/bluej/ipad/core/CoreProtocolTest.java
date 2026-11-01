@@ -33,6 +33,18 @@ class CoreProtocolTest {
             }
             """;
 
+    private static final String READER = """
+            import java.util.Scanner;
+
+            public class Reader {
+                public static int twice() {
+                    Scanner in = new Scanner(System.in);
+                    System.out.print("Number: ");
+                    return in.nextInt() * 2;
+                }
+            }
+            """;
+
     private static CoreProtocol protocol() {
         CoreSession session = new CoreSession();
         var compilation = new InMemoryCompiler().compile("Counter", COUNTER);
@@ -137,6 +149,42 @@ class CoreProtocolTest {
                  "args":[{"array":{"component":"long","items":[{"long":1},{"long":2},{"long":3000000000}]}}]}
                 """);
         assertEquals(Map.of("long", 3_000_000_003L), array.get("value"));
+    }
+
+    @Test
+    void pausesForTerminalInputAndResumesWithStdin() {
+        CoreSession session = new CoreSession();
+        var compilation = new InMemoryCompiler().compile("Reader", READER);
+        assertTrue(compilation.succeeded(), compilation.diagnostics());
+        session.load(compilation.classes());
+        CoreProtocol protocol = new CoreProtocol(session);
+
+        Map<String, Object> waiting = call(protocol,
+                "{\"op\":\"invokeStatic\",\"class\":\"Reader\",\"method\":\"twice\"}");
+        assertEquals("needsInput", waiting.get("status"));
+        assertEquals("Number: ", waiting.get("output"));
+
+        Map<String, Object> done = call(protocol, "{\"op\":\"stdin\",\"text\":\"21\"}");
+        assertEquals(Map.of("int", 42L), done.get("value"));
+
+        Map<String, Object> rejected = call(protocol, "{\"op\":\"stdin\",\"text\":\"5\"}");
+        assertTrue(((Map<?, ?>) rejected.get("error")).get("message").toString()
+                .contains("no program is waiting"));
+    }
+
+    @Test
+    void cancelsAPausedCallAndAcceptsTheNextOne() {
+        CoreSession session = new CoreSession();
+        var compilation = new InMemoryCompiler().compile("Reader", READER);
+        assertTrue(compilation.succeeded(), compilation.diagnostics());
+        session.load(compilation.classes());
+        CoreProtocol protocol = new CoreProtocol(session);
+
+        assertEquals("needsInput", call(protocol,
+                "{\"op\":\"invokeStatic\",\"class\":\"Reader\",\"method\":\"twice\"}").get("status"));
+        assertEquals(true, call(protocol, "{\"op\":\"cancel\"}").get("cancelled"));
+        assertEquals("needsInput", call(protocol,
+                "{\"op\":\"invokeStatic\",\"class\":\"Reader\",\"method\":\"twice\"}").get("status"));
     }
 
     @Test

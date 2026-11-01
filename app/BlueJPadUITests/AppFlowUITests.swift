@@ -127,6 +127,39 @@ final class AppFlowUITests: XCTestCase {
         attach("12-debug-finished")
     }
 
+    func testTerminalInputFeedsAScannerProgram() throws {
+        launch(openingProject: "Welcome")
+        XCTAssertTrue(element("classRow-Doubler").waitForExistence(timeout: 45),
+                      "the Welcome project should compile its Scanner example")
+
+        element("classRow-Doubler").tap()
+        let create = element("instantiateButton")
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "selecting Doubler should offer Create Object")
+        create.tap()
+        XCTAssertTrue(element("bench-doubler1").waitForExistence(timeout: 20),
+                      "creating a Doubler should put it on the bench")
+
+        element("methods-doubler1").tap()
+        let twice = app.buttons["method-twice"]
+        XCTAssertTrue(twice.waitForExistence(timeout: 10), "the bench menu should list twice()")
+        twice.tap()
+
+        let field = element("stdinField")
+        XCTAssertTrue(field.waitForExistence(timeout: 20),
+                      "a Scanner call should ask the terminal for a line\n\(app.debugDescription)")
+        attach("13-terminal-input")
+        field.tap()
+        field.typeText("6")
+        element("stdinSendButton").tap()
+
+        let returned = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "doubler1.twice() returned 12")
+        ).firstMatch
+        XCTAssertTrue(returned.waitForExistence(timeout: 20),
+                      "typing 6 should let twice() return 12\n\(app.debugDescription)")
+        attach("14-terminal-result")
+    }
+
     func testCreateAClassEditItAndCompile() throws {
         launch(openingProject: "Welcome")
         XCTAssertTrue(element("classRow-Counter").waitForExistence(timeout: 45),

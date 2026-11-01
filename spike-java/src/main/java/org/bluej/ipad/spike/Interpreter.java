@@ -37,7 +37,8 @@ import org.objectweb.asm.tree.VarInsnNode;
  * comparisons and branches, loops, static and instance fields, arrays of every primitive,
  * string constants and concatenation, a set of {@code java.lang} and
  * {@code java.io.PrintStream} intrinsics, object construction, method calls (including
- * recursion) and {@code try}/{@code catch} over the interpreter's own exception table.
+ * recursion and interface dispatch), {@code java.util.Scanner} over a host-supplied
+ * standard input, and {@code try}/{@code catch} over the interpreter's own exception table.
  *
  * <p>The interpreter keeps one {@link Value} per logical value, so a {@code long} or
  * {@code double} takes a single slot on its operand stack even though the JVM gives it two.
@@ -58,8 +59,12 @@ public final class Interpreter {
     private final Map<String, String> builtinSupertypes = new HashMap<>();
     private final java.util.Set<String> initialized = new java.util.HashSet<>();
     private final java.util.Set<String> initializing = new java.util.HashSet<>();
-    private final StringBuilder output = new StringBuilder();
+    // StringBuffer rather than StringBuilder: the terminal reads output while a call is
+    // parked on a breakpoint or waiting for the student to type a line.
+    private final StringBuffer output = new StringBuffer();
     private final InterpretedObject printStream = new InterpretedObject(PRINT_STREAM);
+    private final InterpretedObject inputStream = new InterpretedObject("java.io.InputStream");
+    private volatile InputSource input = InputSource.NONE;
     private final int instructionLimit;
     private int executed;
     private volatile DebugListener debug;
@@ -76,6 +81,17 @@ public final class Interpreter {
     /** Receives one callback per executed source line while a debugger is attached. */
     public interface DebugListener {
         void onLine(FrameView frame);
+    }
+
+    /**
+     * Standard input for the interpreted program. {@link #readLine()} is called on the
+     * executing thread and may block until the student types a line; returning {@code null}
+     * means end of input, which is what {@code Scanner} sees as "no more tokens".
+     */
+    public interface InputSource {
+        String readLine();
+
+        InputSource NONE = () -> null;
     }
 
     private static final class ActiveFrame {
@@ -118,6 +134,8 @@ public final class Interpreter {
         builtinSupertypes.put("java.lang.ClassCastException", "java.lang.RuntimeException");
         builtinSupertypes.put("java.lang.IllegalArgumentException", "java.lang.RuntimeException");
         builtinSupertypes.put("java.lang.NumberFormatException", "java.lang.IllegalArgumentException");
+        builtinSupertypes.put("java.util.InputMismatchException", "java.util.NoSuchElementException");
+        builtinSupertypes.put("java.util.NoSuchElementException", "java.lang.RuntimeException");
         builtinSupertypes.put("java.lang.IllegalStateException", "java.lang.RuntimeException");
         builtinSupertypes.put("java.lang.UnsupportedOperationException", "java.lang.RuntimeException");
         builtinSupertypes.put("java.lang.RuntimeException", "java.lang.Exception");
@@ -152,6 +170,11 @@ public final class Interpreter {
     /** Attaches a debugger; {@code null} detaches it and keeps execution at full speed. */
     public void setDebugListener(DebugListener listener) {
         this.debug = listener;
+    }
+
+    /** Installs the source {@code System.in} reads from; {@code null} restores end-of-input. */
+    public void setInput(InputSource source) {
+        this.input = source == null ? InputSource.NONE : source;
     }
 
     /** The frames of the call stack, innermost first, as the debugger sees them right now. */
@@ -607,6 +630,7 @@ public final class Interpreter {
     private Value instantiateDynamic(TypeInsnNode insn) {
         String name = insn.desc.replace('/', '.');
         if (isThrowable(name)) return new Value.ObjectValue(new InterpretedObject(name));
+        if (name.equals("java.util.Scanner")) return new Value.ObjectValue(newScanner());
         if (name.equals("java.lang.StringBuilder") || name.equals("java.lang.StringBuffer")) {
             InterpretedObject builder = new InterpretedObject(name);
             builder.setField("value", new Value.StringValue(""));
@@ -655,7 +679,7 @@ public final class Interpreter {
     private record ResolvedMethod(ClassNode owner, MethodNode method) {}
 
     private ResolvedMethod resolve(ClassNode start, String name, String descriptor) {
-        for (ClassNode node : hierarchy(start)) {
+        for (ClassNode node : typeHierarchy(start)) {
             for (MethodNode method : node.methods) {
                 if (method.name.equals(name) && method.desc.equals(descriptor)) {
                     return new ResolvedMethod(node, method);
@@ -663,6 +687,31 @@ public final class Interpreter {
             }
         }
         throw new IllegalArgumentException("method not found: " + start.name + "." + name + descriptor);
+    }
+
+    /**
+     * This type, its superclasses and every interface reachable from either, nearest first.
+     * Class methods therefore win over interface defaults, which is Java's rule.
+     */
+    private List<ClassNode> typeHierarchy(ClassNode type) {
+        List<ClassNode> ordered = new ArrayList<>();
+        java.util.ArrayDeque<ClassNode> queue = new java.util.ArrayDeque<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        queue.add(type);
+        while (!queue.isEmpty()) {
+            ClassNode node = queue.poll();
+            if (!seen.add(node.name.replace('/', '.'))) continue;
+            ordered.add(node);
+            if (node.superName != null) {
+                ClassNode parent = classes.get(node.superName.replace('/', '.'));
+                if (parent != null) queue.add(parent);
+            }
+            for (String implemented : node.interfaces) {
+                ClassNode itf = classes.get(implemented.replace('/', '.'));
+                if (itf != null) queue.add(itf);
+            }
+        }
+        return ordered;
     }
 
     // ---------------------------------------------------------------- intrinsics
@@ -742,6 +791,47 @@ public final class Interpreter {
                         yield receiver;
                     }
                     default -> NO_INTRINSIC;
+                };
+            }
+            case "java.util.Scanner" -> {
+                InterpretedObject scanner = requireObject(receiver, "Scanner");
+                if (name.equals("<init>")) {
+                    // new Scanner(System.in) reads the terminal; new Scanner("1 2") is a
+                    // literal that is already at end of input.
+                    boolean literal = args.length == 1 && args[0] instanceof Value.StringValue;
+                    String text = literal ? stringValue(args[0]) : "";
+                    if (literal && !text.endsWith("\n")) text = text + "\n";
+                    scanner.setField("buffer", new Value.StringValue(text));
+                    scanner.setField("eof", new Value.IntValue(literal ? 1 : 0));
+                    yield Value.NullValue.INSTANCE;
+                }
+                yield switch (name) {
+                    case "next" -> new Value.StringValue(scannerToken(scanner));
+                    case "nextLine" -> new Value.StringValue(scannerLine(scanner));
+                    case "nextInt" -> new Value.IntValue(scannerInteger(scanner));
+                    case "nextLong" -> new Value.LongValue(scannerLong(scanner));
+                    case "nextDouble" -> new Value.DoubleValue(scannerDouble(scanner));
+                    case "nextFloat" -> new Value.FloatValue((float) scannerDouble(scanner));
+                    case "nextBoolean" -> new Value.IntValue(scannerBoolean(scanner) ? 1 : 0);
+                    case "hasNext" -> new Value.IntValue(scannerHasToken(scanner) ? 1 : 0);
+                    case "hasNextInt" -> new Value.IntValue(scannerHasToken(scanner)
+                            && isInteger(scannerPeek(scanner)) ? 1 : 0);
+                    case "hasNextLong" -> new Value.IntValue(scannerHasToken(scanner)
+                            && isLong(scannerPeek(scanner)) ? 1 : 0);
+                    case "hasNextDouble" -> new Value.IntValue(scannerHasToken(scanner)
+                            && isDouble(scannerPeek(scanner)) ? 1 : 0);
+                    case "hasNextLine" -> new Value.IntValue(
+                            !scannerBuffer(scanner).isEmpty() || !scannerEof(scanner) ? 1 : 0);
+                    case "close" -> {
+                        scanner.setField("buffer", new Value.StringValue(""));
+                        scanner.setField("eof", new Value.IntValue(1));
+                        yield Value.NullValue.INSTANCE;
+                    }
+                    // Delimiters and locales are not modelled; keeping the scanner usable
+                    // is better than failing a program over a call that changes nothing.
+                    case "useDelimiter", "useLocale" -> receiver;
+                    default -> throw new UnsupportedOperationException(
+                            "java.util.Scanner." + name + " is not supported");
                 };
             }
             case "java.lang.Math" -> {
@@ -919,6 +1009,9 @@ public final class Interpreter {
         if (className.equals("java.lang.System") && fieldName.equals("err")) {
             return new Value.ObjectValue(printStream);
         }
+        if (className.equals("java.lang.System") && fieldName.equals("in")) {
+            return new Value.ObjectValue(inputStream);
+        }
         ClassNode type = classes.get(className);
         if (type != null) ensureInitialized(type);
         return staticFields.getOrDefault(key(className, fieldName), Value.NullValue.INSTANCE);
@@ -928,6 +1021,147 @@ public final class Interpreter {
         ClassNode type = classes.get(className);
         if (type != null) ensureInitialized(type);
         staticFields.put(key(className, fieldName), value);
+    }
+
+    // ---------------------------------------------------------------- Scanner
+
+    private static final String SCANNER = "java.util.Scanner";
+
+    private static InterpretedObject newScanner() {
+        InterpretedObject scanner = new InterpretedObject(SCANNER);
+        scanner.setField("buffer", new Value.StringValue(""));
+        scanner.setField("eof", new Value.IntValue(0));
+        return scanner;
+    }
+
+    private String scannerBuffer(InterpretedObject scanner) {
+        return stringValue(scanner.getField("buffer"));
+    }
+
+    private boolean scannerEof(InterpretedObject scanner) {
+        return asInt(scanner.getField("eof")) != 0;
+    }
+
+    /** Reads one more line into the scanner's buffer, or marks end of input. */
+    private void scannerFill(InterpretedObject scanner) {
+        if (scannerEof(scanner)) return;
+        String line = input.readLine();
+        if (line == null) {
+            scanner.setField("eof", new Value.IntValue(1));
+            return;
+        }
+        scanner.setField("buffer", new Value.StringValue(scannerBuffer(scanner) + line + "\n"));
+    }
+
+    /** Removes leading whitespace, reading more lines until a token starts or input ends. */
+    private void scannerSkipWhitespace(InterpretedObject scanner) {
+        while (true) {
+            String buffer = scannerBuffer(scanner);
+            int index = 0;
+            while (index < buffer.length() && Character.isWhitespace(buffer.charAt(index))) index++;
+            if (index > 0) scanner.setField("buffer", new Value.StringValue(buffer.substring(index)));
+            if (index < buffer.length() || scannerEof(scanner)) return;
+            scannerFill(scanner);
+            if (scannerBuffer(scanner).isEmpty() && scannerEof(scanner)) return;
+        }
+    }
+
+    private boolean scannerHasToken(InterpretedObject scanner) {
+        scannerSkipWhitespace(scanner);
+        return !scannerBuffer(scanner).isEmpty();
+    }
+
+    /** The next token without consuming it; the caller must have checked hasToken first. */
+    private String scannerPeek(InterpretedObject scanner) {
+        String buffer = scannerBuffer(scanner);
+        int end = 0;
+        while (end < buffer.length() && !Character.isWhitespace(buffer.charAt(end))) end++;
+        return buffer.substring(0, end);
+    }
+
+    private String scannerToken(InterpretedObject scanner) {
+        if (!scannerHasToken(scanner)) {
+            throw new InterpretedThrowable("java.util.NoSuchElementException", "No line found");
+        }
+        String buffer = scannerBuffer(scanner);
+        int end = 0;
+        while (end < buffer.length() && !Character.isWhitespace(buffer.charAt(end))) end++;
+        scanner.setField("buffer", new Value.StringValue(buffer.substring(end)));
+        return buffer.substring(0, end);
+    }
+
+    /** The rest of the current line, without its terminator. */
+    private String scannerLine(InterpretedObject scanner) {
+        String buffer = scannerBuffer(scanner);
+        if (buffer.isEmpty() && !scannerEof(scanner)) {
+            scannerFill(scanner);
+            buffer = scannerBuffer(scanner);
+        }
+        if (buffer.isEmpty()) {
+            throw new InterpretedThrowable("java.util.NoSuchElementException", "No line found");
+        }
+        int newline = buffer.indexOf('\n');
+        String line = newline < 0 ? buffer : buffer.substring(0, newline);
+        scanner.setField("buffer", new Value.StringValue(newline < 0 ? "" : buffer.substring(newline + 1)));
+        if (line.endsWith("\r")) line = line.substring(0, line.length() - 1);
+        return line;
+    }
+
+    private int scannerInteger(InterpretedObject scanner) {
+        String token = scannerToken(scanner);
+        if (!isInteger(token)) throw inputMismatch(token);
+        return Integer.parseInt(token);
+    }
+
+    private long scannerLong(InterpretedObject scanner) {
+        String token = scannerToken(scanner);
+        if (!isLong(token)) throw inputMismatch(token);
+        return Long.parseLong(token);
+    }
+
+    private double scannerDouble(InterpretedObject scanner) {
+        String token = scannerToken(scanner);
+        if (!isDouble(token)) throw inputMismatch(token);
+        return Double.parseDouble(token);
+    }
+
+    private boolean scannerBoolean(InterpretedObject scanner) {
+        String token = scannerToken(scanner);
+        if (token.equalsIgnoreCase("true")) return true;
+        if (token.equalsIgnoreCase("false")) return false;
+        throw inputMismatch(token);
+    }
+
+    private static InterpretedThrowable inputMismatch(String token) {
+        return new InterpretedThrowable("java.util.InputMismatchException",
+                "For input string: \"" + token + "\"");
+    }
+
+    private static boolean isInteger(String token) {
+        try {
+            Integer.parseInt(token);
+            return true;
+        } catch (NumberFormatException notAnInt) {
+            return false;
+        }
+    }
+
+    private static boolean isLong(String token) {
+        try {
+            Long.parseLong(token);
+            return true;
+        } catch (NumberFormatException notALong) {
+            return false;
+        }
+    }
+
+    private static boolean isDouble(String token) {
+        try {
+            Double.parseDouble(token);
+            return true;
+        } catch (NumberFormatException notADouble) {
+            return false;
+        }
     }
 
     private int handlerFor(MethodNode method, Map<LabelNode, Integer> labels, int pc, String exceptionClass) {
@@ -942,14 +1176,23 @@ public final class Interpreter {
         return -1;
     }
 
+    /** Whether {@code className} is a subtype of {@code target}, following superclasses and interfaces. */
     private boolean isAssignable(String className, String target) {
         if (className.equals(target) || target.equals("java.lang.Object")) return true;
-        String current = className;
-        for (int guard = 0; guard < 32 && current != null; guard++) {
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        queue.add(className);
+        while (!queue.isEmpty()) {
+            String current = queue.poll();
+            if (current == null || !seen.add(current)) continue;
+            if (current.equals(target)) return true;
             ClassNode node = classes.get(current);
-            current = node != null ? (node.superName == null ? null : node.superName.replace('/', '.'))
-                    : builtinSupertypes.get(current);
-            if (current != null && current.equals(target)) return true;
+            if (node != null) {
+                if (node.superName != null) queue.add(node.superName.replace('/', '.'));
+                for (String implemented : node.interfaces) queue.add(implemented.replace('/', '.'));
+            } else if (builtinSupertypes.containsKey(current)) {
+                queue.add(builtinSupertypes.get(current));
+            }
         }
         return false;
     }
@@ -989,8 +1232,9 @@ public final class Interpreter {
     }
 
     private MethodNode findCompatibleMethod(ClassNode type, String name, Value[] args) {
-        // Constructors belong to the class itself; other methods are inherited.
-        List<ClassNode> candidates = name.equals("<init>") ? List.of(type) : hierarchy(type);
+        // Constructors belong to the class itself; other methods are inherited, including
+        // interface defaults.
+        List<ClassNode> candidates = name.equals("<init>") ? List.of(type) : typeHierarchy(type);
         for (ClassNode candidate : candidates) {
             MethodNode widened = null;
             for (MethodNode method : candidate.methods) {
