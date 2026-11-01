@@ -207,6 +207,7 @@ final class WorkspaceTests: XCTestCase {
         defer { fixture.cleanUp() }
         await fixture.workspace.openProject("Demo")
 
+        _ = await fixture.workspace.instantiate("Counter")
         fixture.core.output = "Number: "
         fixture.core.invokeNeedsInput = true
         let parked = await fixture.workspace.call(handle: 1, method: "twice", arguments: [])
